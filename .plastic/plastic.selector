@@ -1,0 +1,4 @@
+repository "SlimeRoguelike/SlimeRoguelike@14568929563952@cloud"
+  path "/"
+    br "/main"
+    co "/main"
