@@ -7,6 +7,7 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private float rotationSpeed = 15f;
 
     private CharacterController _controller;
+    public CharacterController CharController => _controller;
 
     private void Start() => _controller = GetComponent<CharacterController>();
 
