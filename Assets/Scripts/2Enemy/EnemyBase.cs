@@ -3,71 +3,145 @@ using System.Collections.Generic;
 
 public class EnemyBase : MonoBehaviour
 {
-    public Vector2Int currentPos = new Vector2Int(2, 0);
-    private bool isAttackPending = false;
+    public EnemyData data;
+    public int currentHp;
+    public Vector2Int currentPos;
+    public Vector2Int intendedPos;
+    private int moveCounter = 0;
+    private int attackCounter = 0;
+    public List<StatusEffect> activeEffects = new List<StatusEffect>();
+    private bool isStunned => activeEffects.Exists(e => e.type == StatusType.Stun);
 
-    [Header("Visuals")]
-    public GameObject attackIndicatorPrefab;
+    public GameObject indicatorPrefab;
     private List<GameObject> activeIndicators = new List<GameObject>();
 
-    void Start() => UpdateVisualPosition();
+    public void Initialize(EnemyData _data, Vector2Int startPos)
+    {
+        data = _data;
+        currentHp = data.maxHp;
+        currentPos = startPos;
+        if (data.prefab != null)
+        {
+            GameObject model = Instantiate(data.prefab, transform);
+            model.transform.localPosition = Vector3.zero;
+        }
+        moveCounter = data.moveCycle;
+        attackCounter = data.attackCycle;
+        UpdateVisual();
+    }
+
+    public void PlanTurn()
+    {
+        UpdateStatus();
+        intendedPos = currentPos;
+        if (isStunned) return;
+
+        if (moveCounter >= data.moveCycle)
+        {
+            var player = FindObjectOfType<PlayerController>();
+            if (player == null) return;
+
+            int dirX = (player.currentPos.x > currentPos.x) ? 1 : (player.currentPos.x < currentPos.x ? -1 : 0);
+            Vector2Int next = currentPos + new Vector2Int(dirX, 0);
+
+            if (GridManager.Instance.IsWalkable(next))
+            {
+                intendedPos = next;
+            }
+        }
+    }
+
+    public void ApplyCollision()
+    {
+        TakeDamage(data.collisionDamage);
+        AddStatus(StatusType.Stun, 1);
+        intendedPos = currentPos; // 이동 취소
+    }
 
     public void ExecuteTurn()
     {
-        if (isAttackPending) PerformAttack();
-        else DecideNextAction();
-    }
-
-    void DecideNextAction()
-    {
-        int playerX = FindObjectOfType<PlayerController>().currentPos.x;
-
-        if (playerX == currentPos.x)
+        if (isStunned)
         {
-            isAttackPending = true;
-            ShowAttackRange();
+            Debug.Log($"{data.enemyName}: 기절 상태로 턴을 넘깁니다.");
         }
         else
         {
-            int dirX = (playerX > currentPos.x) ? 1 : -1;
-            currentPos.x += dirX;
-            UpdateVisualPosition();
+            if (intendedPos != currentPos)
+            {
+                currentPos = intendedPos;
+                moveCounter = 0;
+            }
+            moveCounter++;
+
+            if (attackCounter >= data.attackCycle)
+            {
+                PerformAttack();
+                attackCounter = 0;
+            }
+            else
+            {
+                ShowAttackRange();
+            }
+            attackCounter++;
+        }
+        UpdateVisual();
+    }
+
+    void PerformAttack()
+    {
+        var player = FindObjectOfType<PlayerController>();
+        for (int i = 1; i <= data.attackRange; i++)
+        {
+            Vector2Int tPos = new Vector2Int(currentPos.x, currentPos.y + i);
+            if (GridManager.Instance.IsObstacle(tPos) && data.attackType == AttackType.Direct) break;
+            if (player.currentPos == tPos)
+            {
+                Debug.Log($"<color=orange>[공격]</color> {data.enemyName} -> 플레이어 피격!");
+                player.TakeDamage(data.attackPower);
+                return;
+            }
         }
     }
 
     void ShowAttackRange()
     {
-        for (int y = 1; y < 5; y++)
+        ClearIndicators();
+        var player = FindObjectOfType<PlayerController>();
+        for (int i = 1; i <= data.attackRange; i++)
         {
-            Vector2Int targetPos = new Vector2Int(currentPos.x, y);
-            if (GridManager.Instance.IsBlocked(targetPos)) break;
-            SpawnIndicator(targetPos);
+            Vector2Int tPos = new Vector2Int(currentPos.x, currentPos.y + i);
+            if (GridManager.Instance.IsObstacle(tPos)) { if (data.attackType == AttackType.Direct) break; else continue; }
+
+            if (data.attackType == AttackType.Direct) SpawnIndicator(tPos);
+            else if (player != null && tPos == player.currentPos) { SpawnIndicator(tPos); break; }
         }
     }
 
-    void PerformAttack()
+    public void TakeDamage(int dmg)
     {
-        ClearIndicators();
-        isAttackPending = false;
+        currentHp -= dmg;
+        Debug.Log($"<color=red>[피격]</color> {data.enemyName} HP: {currentHp}");
+        if (currentHp <= 0)
+        {
+            Debug.Log($"<color=black>[사망]</color> {data.enemyName} 처치됨.");
+            TurnManager.Instance.activeEnemies.Remove(this);
+            Destroy(gameObject);
+        }
     }
 
-    void SpawnIndicator(Vector2Int pos)
+    public void AddStatus(StatusType t, int d) => activeEffects.Add(new StatusEffect(t, d));
+    void UpdateStatus()
     {
-        // 적의 예고 인디케이터도 0.3f 높이 적용
-        Vector3 worldPos = GridManager.Instance.GetWorldPosition(pos, GridManager.Instance.indicatorHeight);
-        GameObject go = Instantiate(attackIndicatorPrefab, worldPos, Quaternion.identity);
-        activeIndicators.Add(go);
+        for (int i = activeEffects.Count - 1; i >= 0; i--)
+        {
+            if (--activeEffects[i].duration <= 0) activeEffects.RemoveAt(i);
+        }
     }
-
-    void ClearIndicators()
+    void SpawnIndicator(Vector2Int p)
     {
-        foreach (var go in activeIndicators) Destroy(go);
-        activeIndicators.Clear();
+        if (!GridManager.Instance.IsInsideGrid(p)) return;
+        activeIndicators.Add(Instantiate(indicatorPrefab, GridManager.Instance.GetWorldPosition(p, GridManager.Instance.indicatorHeight), Quaternion.identity));
     }
-
-    void UpdateVisualPosition()
-    {
-        // 적 유닛도 0.1f 높이 적용
-        transform.position = GridManager.Instance.GetWorldPosition(currentPos, GridManager.Instance.unitHeight);
-    }
+    void ClearIndicators() { foreach (var g in activeIndicators) Destroy(g); activeIndicators.Clear(); }
+    void UpdateVisual() => transform.position = GridManager.Instance.GetWorldPosition(currentPos, GridManager.Instance.unitHeight);
 }

@@ -9,9 +9,9 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 7818698970963900151}
-  - component: {fileID: 6779102611703646418}
+  - component: {fileID: 7971656751496546803}
   m_Layer: 0
-  m_Name: Player
+  m_Name: HastyGoblin
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -33,7 +33,7 @@ Transform:
   - {fileID: 5108319820893815131}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &6779102611703646418
+--- !u!114 &7971656751496546803
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -42,13 +42,14 @@ MonoBehaviour:
   m_GameObject: {fileID: 3823146225679016858}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: cbd8cb60895118e42b01dfa3fd2b7aec, type: 3}
+  m_Script: {fileID: 11500000, guid: df59050cfe86d7545b3540b9b45d2139, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxHp: 10
+  data: {fileID: 11400000, guid: 607fc8a040caaea4fbfe229236c29287, type: 2}
   currentHp: 0
-  attackPower: 2
-  currentPos: {x: 2, y: 4}
+  currentPos: {x: 2, y: 0}
+  intendedPos: {x: 0, y: 0}
+  activeEffects: []
   indicatorPrefab: {fileID: 3876058077864187218, guid: aa4fda1c73e792d4db5117f0a5798a7d, type: 3}
 --- !u!1 &7642302181750756540
 GameObject:
@@ -144,7 +145,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 8b0fc25fec0106b4b8044b95b98ce89a, type: 2}
+  - {fileID: 2100000, guid: 599548702dab7a54b9add20017db11bd, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0

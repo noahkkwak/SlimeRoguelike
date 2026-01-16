@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 7818698970963900151}
   - component: {fileID: 7971656751496546803}
   m_Layer: 0
-  m_Name: Enemy
+  m_Name: MortarGoblin
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -45,8 +45,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: df59050cfe86d7545b3540b9b45d2139, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  data: {fileID: 11400000, guid: 19705ce8c200a9e41b7dc25706a635f6, type: 2}
+  currentHp: 0
   currentPos: {x: 2, y: 0}
-  attackIndicatorPrefab: {fileID: 3876058077864187218, guid: aa4fda1c73e792d4db5117f0a5798a7d, type: 3}
+  intendedPos: {x: 0, y: 0}
+  activeEffects: []
+  indicatorPrefab: {fileID: 3876058077864187218, guid: aa4fda1c73e792d4db5117f0a5798a7d, type: 3}
 --- !u!1 &7642302181750756540
 GameObject:
   m_ObjectHideFlags: 0
@@ -141,7 +145,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 559b76f636f896342af18c0f5480c44f, type: 2}
+  - {fileID: 2100000, guid: 79ba30046ae339d4e9cfc148b191ea89, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
