@@ -46,11 +46,15 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   data: {fileID: 11400000, guid: 19705ce8c200a9e41b7dc25706a635f6, type: 2}
+  attackIndicatorPrefab: {fileID: 3876058077864187218, guid: aa4fda1c73e792d4db5117f0a5798a7d, type: 3}
+  moveIndicatorPrefab: {fileID: 3876058077864187218, guid: 335c56bfb7dd80c44b61ad485998c857, type: 3}
   currentHp: 0
   currentPos: {x: 2, y: 0}
   intendedPos: {x: 0, y: 0}
+  moveCounter: 0
+  attackCounter: 0
+  isPreparingAttack: 0
   activeEffects: []
-  indicatorPrefab: {fileID: 3876058077864187218, guid: aa4fda1c73e792d4db5117f0a5798a7d, type: 3}
 --- !u!1 &7642302181750756540
 GameObject:
   m_ObjectHideFlags: 0

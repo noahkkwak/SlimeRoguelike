@@ -45,11 +45,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cbd8cb60895118e42b01dfa3fd2b7aec, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  charName: Slime
   maxHp: 10
   currentHp: 0
   attackPower: 2
   currentPos: {x: 2, y: 4}
-  indicatorPrefab: {fileID: 3876058077864187218, guid: aa4fda1c73e792d4db5117f0a5798a7d, type: 3}
+  attackIndicatorPrefab: {fileID: 3876058077864187218, guid: aa4fda1c73e792d4db5117f0a5798a7d, type: 3}
+  defenseIndicatorPrefab: {fileID: 3876058077864187218, guid: eea0bc8817ab10e46bffa659ab51588f, type: 3}
 --- !u!1 &7642302181750756540
 GameObject:
   m_ObjectHideFlags: 0
