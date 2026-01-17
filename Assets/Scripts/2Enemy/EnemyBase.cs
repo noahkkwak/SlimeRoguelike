@@ -158,17 +158,20 @@ public class EnemyBase : MonoBehaviour
     void PerformAttack()
     {
         var player = FindObjectOfType<PlayerController>();
-        bool hit = false;
+        bool hit = false; // 여기서 선언된 hit 변수를...
 
         foreach (Vector2Int targetPos in attackTargetTiles)
         {
             if (player != null && player.currentPos == targetPos)
             {
-                Debug.Log($"<color=orange>[적중]</color> {data.enemyName} -> 플레이어");
+                Debug.Log($"<color=orange>[적중]</color> {data.enemyName} -> 플레이어에게 {data.attackPower} 대미지!");
                 player.TakeDamage(data.attackPower);
-                hit = true;
+                hit = true; // 적중 시 true로 변경
+                break;
             }
         }
+
+        // [추가] 이제 hit 변수를 사용하여 로그를 출력합니다. (경고 해결!)
         if (!hit)
         {
             Debug.Log($"<color=white>[공격 회피]</color> {data.enemyName}의 공격이 빈 공간을 타격했습니다.");
