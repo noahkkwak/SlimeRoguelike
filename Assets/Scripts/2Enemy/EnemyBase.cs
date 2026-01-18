@@ -1,73 +1,64 @@
 using UnityEngine;
 using System.Collections.Generic;
 
-// [데이터 구조] 적이 이번 턴에 하려는 행동의 구체적 정보
 [System.Serializable]
 public class EnemyIntent
 {
-    public IntentType type;         // 행동 종류 (Move, Attack, Wait)
-    public Vector2Int targetPos;    // 이동할 목표 좌표
-    public List<Vector2Int> areaTargets = new List<Vector2Int>(); // 공격할 타일들 (인디케이터용)
+    public IntentType type;
+    public Vector2Int targetPos;
+    public List<Vector2Int> areaTargets = new List<Vector2Int>();
 }
 
 public class EnemyBase : MonoBehaviour
 {
     [Header("Settings & Data")]
     public EnemyData data;
-    public GameObject attackIndicatorPrefab; // 공격 예고 (빨강)
-    public GameObject moveIndicatorPrefab;   // 이동 예고 (노랑/화살표)
+    public GameObject attackIndicatorPrefab;
+    public GameObject moveIndicatorPrefab;
 
-    [Header("State (Debug)")]
+    [Header("State")]
     public EnemyState state = EnemyState.Idle;
     public int currentHp;
     public Vector2Int currentPos;
 
-    // [핵심] 현재 확정된 다음 행동 의도
     public EnemyIntent currentIntent = new EnemyIntent();
 
-    // 행동 패턴용 쿨타임 카운터
     [SerializeField] private int moveCooldownTimer = 0;
     [SerializeField] private int attackCooldownTimer = 0;
 
-    // 상태 이상 및 컴포넌트
     public List<StatusEffect> activeEffects = new List<StatusEffect>();
     public bool IsStunned => activeEffects.Exists(e => e.type == StatusType.Stun);
 
     private List<GameObject> activeIndicators = new List<GameObject>();
-    private Animator animator; // 애니메이터 (없으면 무시됨)
+    private Animator animator;
 
     public void Initialize(Vector2Int startPos)
     {
-        if (data == null) { Debug.LogError("EnemyData Missing!"); return; }
-
+        if (data == null) return;
         currentHp = data.maxHp;
         currentPos = startPos;
         state = EnemyState.Idle;
-
-        // 쿨타임 초기화
         moveCooldownTimer = 0;
         attackCooldownTimer = 0;
-
-        // 애니메이터 가져오기
         animator = GetComponentInChildren<Animator>();
-
         UpdateVisual();
     }
 
-    // ==================================================================================
-    // [Phase 1: Plan] 의도 수립 - 턴 시작 시 호출되어 '다음 행동'을 결정하고 예고함
-    // ==================================================================================
+    // [Phase 1: Plan] 스마트 AI 의도 수립
     public void CalculateIntent()
     {
-        ClearIndicators(); // 이전 턴의 잔상 제거
-        UpdateStatus();    // 상태 이상 턴 차감
+        ClearIndicators();
+        UpdateStatus();
 
-        // 1. 기절 상태 체크
+        // 1. 기절 처리
         if (IsStunned)
         {
             state = EnemyState.Stunned;
             currentIntent.type = IntentType.Wait;
             if (animator) animator.SetBool("IsStunned", true);
+
+            // 기절이어도 내 자리는 예약해야 남이 안 겹침!
+            GridManager.Instance.TryReserveTile(currentPos);
             return;
         }
         else
@@ -76,98 +67,120 @@ public class EnemyBase : MonoBehaviour
         }
 
         state = EnemyState.Ready;
+        bool intentSet = false;
 
-        // 2. AI 우선순위 판단 (공격 > 이동)
-        // A. 공격 쿨타임이 찼는가?
+        // 2. 공격 시도 (조건: 쿨타임 + 기획자님 제안 '거리 조건')
         if (attackCooldownTimer >= data.attackCycle)
         {
-            SetAttackIntent();
+            var player = FindObjectOfType<PlayerController>();
+            if (player != null)
+            {
+                int xDiff = Mathf.Abs(player.currentPos.x - currentPos.x);
+
+                // [기획 반영] 내 좌우 2칸(총 5열) 범위 내에 있을 때만 공격
+                if (xDiff <= 2)
+                {
+                    SetAttackIntent();
+                    intentSet = true;
+                }
+            }
         }
-        // B. 이동 쿨타임이 찼는가? (공격을 안 할 때만)
-        else if (moveCooldownTimer >= data.moveCycle)
+
+        // 3. 이동 시도 (공격 안 할 때)
+        if (!intentSet && moveCooldownTimer >= data.moveCycle)
         {
-            SetMoveIntent();
+            // 이동 성공 시 true 반환
+            intentSet = SetMoveIntent();
         }
-        // C. 둘 다 아니면 대기
-        else
+
+        // 4. 대기 (아무것도 못하면 자리 사수)
+        if (!intentSet)
         {
             SetWaitIntent();
         }
     }
 
-    // --- 의도 설정 헬퍼 함수들 ---
+    // --- 헬퍼 함수 ---
 
     void SetAttackIntent()
     {
         currentIntent.type = IntentType.Attack;
         currentIntent.areaTargets.Clear();
 
-        // 공격 범위 계산
+        // 공격 중에도 제자리는 예약 (이동하는 적과 겹치지 않게)
+        GridManager.Instance.TryReserveTile(currentPos);
+
         if (data.attackType == AttackType.Direct)
         {
-            // 직사: 장애물 전까지 쭉
             for (int i = 1; i <= data.attackRange; i++)
             {
                 Vector2Int tPos = new Vector2Int(currentPos.x, currentPos.y + i);
-                // 맵 밖이거나 장애물이면 중단
                 if (!GridManager.Instance.IsInsideGrid(tPos) || GridManager.Instance.IsObstacle(tPos)) break;
-
                 currentIntent.areaTargets.Add(tPos);
                 SpawnIndicator(attackIndicatorPrefab, tPos);
             }
         }
         else if (data.attackType == AttackType.Arcing)
         {
-            // 곡사: 최대 사거리 타일 하나 조준
             int targetY = Mathf.Min(currentPos.y + data.attackRange, GridManager.Instance.height - 1);
             Vector2Int tPos = new Vector2Int(currentPos.x, targetY);
-
             if (GridManager.Instance.IsInsideGrid(tPos))
             {
                 currentIntent.areaTargets.Add(tPos);
                 SpawnIndicator(attackIndicatorPrefab, tPos);
             }
         }
-
         Debug.Log($"<color=yellow>[의도]</color> {data.enemyName}: 공격 준비");
     }
 
-    void SetMoveIntent()
+    bool SetMoveIntent()
     {
         var player = FindObjectOfType<PlayerController>();
-        if (player == null) { SetWaitIntent(); return; }
+        if (player == null) return false;
 
-        // 간단한 추적 AI (X축 이동)
         int dirX = 0;
-        if (player.currentPos.x > currentPos.x) dirX = 1;
-        else if (player.currentPos.x < currentPos.x) dirX = -1;
+
+        // [이동 패턴 적용] Chase(기본), MaintainDist, Flee 지원
+        switch (data.movePattern)
+        {
+            case MovePattern.Chase:
+                if (player.currentPos.x > currentPos.x) dirX = 1;
+                else if (player.currentPos.x < currentPos.x) dirX = -1;
+                break;
+            // 필요 시 다른 패턴 케이스 추가
+            default:
+                if (player.currentPos.x > currentPos.x) dirX = 1;
+                else if (player.currentPos.x < currentPos.x) dirX = -1;
+                break;
+        }
+
+        if (dirX == 0) return false; // 이동 방향 없음
 
         Vector2Int nextPos = currentPos + new Vector2Int(dirX, 0);
 
-        if (GridManager.Instance.IsWalkable(nextPos))
+        // [예약 시스템] "거기 비었나요?"
+        if (GridManager.Instance.TryReserveTile(nextPos))
         {
             currentIntent.type = IntentType.Move;
             currentIntent.targetPos = nextPos;
-            SpawnIndicator(moveIndicatorPrefab, nextPos); // 노란색 이동 예고
-            Debug.Log($"<color=green>[의도]</color> {data.enemyName}: 이동 예고 ({nextPos})");
+            SpawnIndicator(moveIndicatorPrefab, nextPos);
+            Debug.Log($"<color=green>[의도]</color> {data.enemyName}: 이동 ({nextPos})");
+            return true;
         }
         else
         {
-            SetWaitIntent(); // 막혔으면 대기
+            // 막혔으면 이동 실패 -> false 반환하여 Wait로 넘어감
+            return false;
         }
     }
 
     void SetWaitIntent()
     {
         currentIntent.type = IntentType.Wait;
+        GridManager.Instance.TryReserveTile(currentPos); // 자리 사수
     }
 
-
-    // ==================================================================================
-    // [Phase 3: Execute] 실행 - 플레이어 턴 종료 후 호출되어 '의도'를 실제 행동으로 옮김
-    // ==================================================================================
-
-    // 1. 이동 실행 함수
+    // [Phase 3: Execute] 실행 로직
     public void ExecuteMove()
     {
         if (IsStunned || state == EnemyState.Dead) return;
@@ -175,41 +188,32 @@ public class EnemyBase : MonoBehaviour
         if (currentIntent.type == IntentType.Move)
         {
             currentPos = currentIntent.targetPos;
-            moveCooldownTimer = 0; // 이동했으니 쿨타임 리셋
-            ClearIndicators();     // 이동 예고 타일 삭제
+            moveCooldownTimer = 0;
+            ClearIndicators();
             UpdateVisual();
         }
         else
         {
-            // 공격 의도가 아닐 때만 이동 쿨타임 증가 (공격 중엔 이동 쿨타임 멈춤)
-            if (currentIntent.type != IntentType.Attack)
-            {
-                moveCooldownTimer++;
-            }
+            if (currentIntent.type != IntentType.Attack) moveCooldownTimer++;
         }
     }
 
-    // 2. 공격 실행 함수
     public void ExecuteAttack()
     {
         if (IsStunned || state == EnemyState.Dead) return;
 
         if (currentIntent.type == IntentType.Attack)
         {
-            // 애니메이션 트리거
             if (animator) animator.SetTrigger("Attack");
-
             PerformAttackLogic();
-
-            attackCooldownTimer = 0; // 공격했으니 쿨타임 리셋
-            ClearIndicators();       // 공격 예고 타일 삭제
+            attackCooldownTimer = 0;
+            ClearIndicators();
         }
         else
         {
-            attackCooldownTimer++; // 공격하지 않았다면 쿨타임 증가
+            attackCooldownTimer++;
         }
 
-        // 턴 종료 처리
         state = EnemyState.Idle;
         currentIntent.type = IntentType.None;
     }
@@ -218,8 +222,6 @@ public class EnemyBase : MonoBehaviour
     {
         var player = FindObjectOfType<PlayerController>();
         bool hit = false;
-
-        // Plan 단계에서 계산해둔 타겟 타일들에 현재 플레이어가 있는지 확인
         foreach (Vector2Int targetPos in currentIntent.areaTargets)
         {
             if (player != null && player.currentPos == targetPos)
@@ -230,24 +232,21 @@ public class EnemyBase : MonoBehaviour
                 break;
             }
         }
-        if (!hit) Debug.Log($"<color=white>[빗나감]</color> {data.enemyName} 공격 허탕");
+        if (!hit) Debug.Log($"<color=white>[빗나감]</color> {data.enemyName}");
     }
 
     // --- 유틸리티 ---
-
     public void TakeDamage(int dmg)
     {
         currentHp -= dmg;
         if (animator) animator.SetTrigger("Hit");
-
         if (currentHp <= 0)
         {
             state = EnemyState.Dead;
             if (animator) animator.SetBool("IsDead", true);
-
             TurnManager.Instance.OnEnemyDead(this);
             ClearIndicators();
-            Destroy(gameObject, 0.5f); // 0.5초 뒤 파괴 (사망 모션 등 고려)
+            Destroy(gameObject, 0.5f);
         }
     }
 
@@ -256,8 +255,6 @@ public class EnemyBase : MonoBehaviour
         TakeDamage(damage);
         AddStatus(StatusType.Stun, 1);
         if (animator) animator.SetBool("IsStunned", true);
-
-        // 충돌 시 이번 턴 의도 취소
         currentIntent.type = IntentType.Wait;
         ClearIndicators();
     }
