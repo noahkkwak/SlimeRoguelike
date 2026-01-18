@@ -41,6 +41,12 @@ public class GridManager : MonoBehaviour
         return true;
     }
 
+    public void CancelReservation(Vector2Int pos)
+    {
+        if (reservedTiles.Contains(pos))
+            reservedTiles.Remove(pos);
+    }
+
     public bool IsInsideGrid(Vector2Int pos) => pos.x >= 0 && pos.x < width && pos.y >= 0 && pos.y < height;
     public bool IsWalkable(Vector2Int pos) => IsInsideGrid(pos) && !IsObstacle(pos);
     public bool IsObstacle(Vector2Int pos) => ObstacleMap.ContainsKey(pos) && ObstacleMap[pos];

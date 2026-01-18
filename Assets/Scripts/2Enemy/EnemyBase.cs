@@ -44,21 +44,18 @@ public class EnemyBase : MonoBehaviour
         UpdateVisual();
     }
 
-    // [Phase 1: Plan] 스마트 AI 의도 수립
+    // [Phase 1: Plan]
     public void CalculateIntent()
     {
         ClearIndicators();
         UpdateStatus();
 
-        // 1. 기절 처리
         if (IsStunned)
         {
             state = EnemyState.Stunned;
             currentIntent.type = IntentType.Wait;
             if (animator) animator.SetBool("IsStunned", true);
-
-            // 기절이어도 내 자리는 예약해야 남이 안 겹침!
-            GridManager.Instance.TryReserveTile(currentPos);
+            // 기절 시에는 선점한 자리 유지 (아무것도 안 함)
             return;
         }
         else
@@ -69,15 +66,13 @@ public class EnemyBase : MonoBehaviour
         state = EnemyState.Ready;
         bool intentSet = false;
 
-        // 2. 공격 시도 (조건: 쿨타임 + 기획자님 제안 '거리 조건')
+        // 2. 공격 시도
         if (attackCooldownTimer >= data.attackCycle)
         {
             var player = FindObjectOfType<PlayerController>();
             if (player != null)
             {
                 int xDiff = Mathf.Abs(player.currentPos.x - currentPos.x);
-
-                // [기획 반영] 내 좌우 2칸(총 5열) 범위 내에 있을 때만 공격
                 if (xDiff <= 2)
                 {
                     SetAttackIntent();
@@ -86,29 +81,26 @@ public class EnemyBase : MonoBehaviour
             }
         }
 
-        // 3. 이동 시도 (공격 안 할 때)
+        // 3. 이동 시도
         if (!intentSet && moveCooldownTimer >= data.moveCycle)
         {
-            // 이동 성공 시 true 반환
             intentSet = SetMoveIntent();
         }
 
-        // 4. 대기 (아무것도 못하면 자리 사수)
+        // 4. 대기
         if (!intentSet)
         {
             SetWaitIntent();
         }
     }
 
-    // --- 헬퍼 함수 ---
-
     void SetAttackIntent()
     {
         currentIntent.type = IntentType.Attack;
         currentIntent.areaTargets.Clear();
 
-        // 공격 중에도 제자리는 예약 (이동하는 적과 겹치지 않게)
-        GridManager.Instance.TryReserveTile(currentPos);
+        // [중요] 이미 TurnManager에서 내 자리를 예약했으므로 추가 예약 불필요
+        // 공격은 제자리에서 하므로 자리 반납도 안 함.
 
         if (data.attackType == AttackType.Direct)
         {
@@ -139,37 +131,37 @@ public class EnemyBase : MonoBehaviour
         if (player == null) return false;
 
         int dirX = 0;
-
-        // [이동 패턴 적용] Chase(기본), MaintainDist, Flee 지원
         switch (data.movePattern)
         {
             case MovePattern.Chase:
                 if (player.currentPos.x > currentPos.x) dirX = 1;
                 else if (player.currentPos.x < currentPos.x) dirX = -1;
                 break;
-            // 필요 시 다른 패턴 케이스 추가
             default:
                 if (player.currentPos.x > currentPos.x) dirX = 1;
                 else if (player.currentPos.x < currentPos.x) dirX = -1;
                 break;
         }
 
-        if (dirX == 0) return false; // 이동 방향 없음
+        if (dirX == 0) return false;
 
         Vector2Int nextPos = currentPos + new Vector2Int(dirX, 0);
 
-        // [예약 시스템] "거기 비었나요?"
+        // [핵심] 다음 자리 예약 시도
         if (GridManager.Instance.TryReserveTile(nextPos))
         {
             currentIntent.type = IntentType.Move;
             currentIntent.targetPos = nextPos;
+
+            // [중요] 이동에 성공했으므로, 찜해뒀던 현재 자리는 풀어줌 (다른 애가 올 수 있게)
+            GridManager.Instance.CancelReservation(currentPos);
+
             SpawnIndicator(moveIndicatorPrefab, nextPos);
             Debug.Log($"<color=green>[의도]</color> {data.enemyName}: 이동 ({nextPos})");
             return true;
         }
         else
         {
-            // 막혔으면 이동 실패 -> false 반환하여 Wait로 넘어감
             return false;
         }
     }
@@ -177,10 +169,9 @@ public class EnemyBase : MonoBehaviour
     void SetWaitIntent()
     {
         currentIntent.type = IntentType.Wait;
-        GridManager.Instance.TryReserveTile(currentPos); // 자리 사수
+        // 대기 시에도 자리 유지 (반납 안 함)
     }
 
-    // [Phase 3: Execute] 실행 로직
     public void ExecuteMove()
     {
         if (IsStunned || state == EnemyState.Dead) return;
