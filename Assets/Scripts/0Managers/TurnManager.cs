@@ -64,4 +64,8 @@ public class TurnManager : MonoBehaviour
     {
         if (activeEnemies.Contains(enemy)) activeEnemies.Remove(enemy);
     }
+    public EnemyBase GetEnemyAt(Vector2Int p)
+    {
+        return activeEnemies.Find(e => e.currentPos == p);
+    }
 }
