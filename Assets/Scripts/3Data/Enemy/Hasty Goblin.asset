@@ -21,4 +21,4 @@ MonoBehaviour:
   attackType: 0
   movePattern: 1
   moveCycle: 2
-  attackCycle: 1
+  attackCycle: 2

@@ -2,113 +2,97 @@ using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 
-// TurnState 정의 포함
-public enum TurnState { PlayerTurn, Processing, EnemyTurn, GameOver }
-
 public class TurnManager : MonoBehaviour
 {
     public static TurnManager Instance;
+
+    // 현재 턴의 상태 (플레이어 턴인지, 적이 행동하는 중인지)
     public TurnState currentState = TurnState.PlayerTurn;
 
-    // [변경] EnemyData 리스트와 BasePrefab 변수를 제거했습니다.
-    // 대신 스폰된 적들을 관리하는 리스트만 남깁니다.
+    // 현재 살아있는 적 리스트
     public List<EnemyBase> activeEnemies = new List<EnemyBase>();
 
     void Awake() => Instance = this;
 
     void Start()
     {
-        // StageManager가 없으면 에러 방지를 위해 체크
-        if (StageManager.Instance == null)
+        // 1. 그리드 초기화 (기본 5x7 전장)
+        // 추후 StageManager에서 이 값을 받아와 스테이지별로 다르게 설정 가능
+        if (GridManager.Instance != null)
+            GridManager.Instance.SetupGrid(5, 7);
+        else
+            Debug.LogError("GridManager가 씬에 없습니다!");
+
+        // 2. 적 스폰 (StageManager가 있다면 연동, 없으면 테스트용 로직)
+        if (StageManager.Instance != null)
         {
-            Debug.LogError("StageManager가 씬에 없습니다!");
-            return;
+            // StageManager 로직에 따라 스폰 (이전 코드 활용)
+            // SpawnEnemies(); 
         }
-        SpawnEnemies();
+
+        // 3. 게임 시작! 첫 턴은 플레이어부터 시작
+        StartPlayerTurn();
     }
 
-    void SpawnEnemies()
+    // =================================================================
+    // [Phase 1 & 2] 플레이어 턴 시작 (적의 의도가 먼저 공개됨)
+    // =================================================================
+    public void StartPlayerTurn()
     {
-        // 1행(y=0)에 랜덤하게 1~3마리 배치
-        int count = Random.Range(1, 4);
-
-        // 0~6 인덱스 중 랜덤 선택 (중복 방지)
-        List<int> availableX = new List<int>();
-        for (int i = 0; i < GridManager.Instance.width; i++) availableX.Add(i);
-
-        for (int i = 0; i < count; i++)
-        {
-            if (availableX.Count == 0) break;
-            int randomIndex = Random.Range(0, availableX.Count);
-            int x = availableX[randomIndex];
-            availableX.RemoveAt(randomIndex);
-
-            // [변경] StageManager에게 프리팹 요청
-            GameObject prefabToSpawn = StageManager.Instance.GetRandomEnemyPrefab();
-
-            if (prefabToSpawn != null)
-            {
-                GameObject go = Instantiate(prefabToSpawn); // 프리팹 생성
-                EnemyBase eb = go.GetComponent<EnemyBase>();
-
-                // 위치 초기화 (데이터는 프리팹에 있는 것을 그대로 사용)
-                eb.Initialize(new Vector2Int(x, 0));
-                activeEnemies.Add(eb);
-
-                Debug.Log($"<color=cyan>[Spawn]</color> {eb.data.enemyName} (Stage {StageManager.Instance.currentStage})");
-            }
-        }
-    }
-
-    public EnemyBase GetEnemyAt(Vector2Int p) => activeEnemies.Find(e => e.currentPos == p);
-
-    public void OnPlayerActionCompleted()
-    {
-        if (currentState == TurnState.PlayerTurn)
-            StartCoroutine(ProcessTurns());
-    }
-
-    public void OnEnemyDead(EnemyBase enemy)
-    {
-        if (activeEnemies.Contains(enemy)) activeEnemies.Remove(enemy);
-        // 모든 적 처치 시 로직 추가 가능 (예: StageManager.Instance.NextStage())
-    }
-
-    IEnumerator ProcessTurns()
-    {
-        currentState = TurnState.Processing;
-        yield return new WaitForSeconds(0.2f);
-
-        // 1. 계획
-        foreach (var e in activeEnemies) e.PlanTurn();
-
-        // 2. 충돌 체크
-        Dictionary<Vector2Int, List<EnemyBase>> moveTargets = new Dictionary<Vector2Int, List<EnemyBase>>();
-        foreach (var e in activeEnemies)
-        {
-            if (!moveTargets.ContainsKey(e.intendedPos)) moveTargets[e.intendedPos] = new List<EnemyBase>();
-            moveTargets[e.intendedPos].Add(e);
-        }
-        foreach (var kvp in moveTargets)
-        {
-            if (kvp.Value.Count > 1) foreach (var e in kvp.Value) e.ApplyCollision();
-        }
-
-        // 3. 실행 (리스트 복사본 사용)
-        List<EnemyBase> enemyListSnapshot = new List<EnemyBase>(activeEnemies);
-        foreach (var e in enemyListSnapshot)
-        {
-            if (e != null) e.ExecuteTurn();
-            yield return new WaitForSeconds(0.1f);
-        }
-
-        yield return new WaitForSeconds(0.3f);
         currentState = TurnState.PlayerTurn;
 
-        // [신규] 플레이어에게 턴 시작을 알려 상태(방어 등)를 리셋시킴
+        // A. 모든 적에게 "다음 턴에 뭐 할지 정해서 인디케이터 띄워!" 라고 명령
+        foreach (var enemy in activeEnemies)
+        {
+            if (enemy != null) enemy.CalculateIntent();
+        }
+
+        // B. 플레이어 상태 리셋 (방어 태세 초기화 등)
         var player = FindObjectOfType<PlayerController>();
         if (player) player.OnTurnStart();
 
-        Debug.Log("<color=green>--- 플레이어 턴 시작 ---</color>");
+        Debug.Log("<color=green>--- Player Turn Start (적의 의도가 표시되었습니다) ---</color>");
+    }
+
+    // 플레이어가 행동(이동/공격/방어)을 마치면 호출됨
+    public void OnPlayerActionCompleted()
+    {
+        if (currentState == TurnState.PlayerTurn)
+            StartCoroutine(ExecuteEnemyTurnPhase());
+    }
+
+    // =================================================================
+    // [Phase 3] 적 행동 실행 (이동 -> 공격 순차 처리)
+    // =================================================================
+    IEnumerator ExecuteEnemyTurnPhase()
+    {
+        currentState = TurnState.EnemyTurn;
+
+        // 1. 모든 적 이동 실행
+        // (의도했던 이동 위치로 일제히 이동합니다)
+        foreach (var enemy in activeEnemies)
+        {
+            if (enemy != null) enemy.ExecuteMove();
+        }
+
+        yield return new WaitForSeconds(0.3f); // 이동 연출 대기 시간
+
+        // 2. 모든 적 공격 실행
+        // (의도했던 타겟 위치를 타격합니다)
+        foreach (var enemy in activeEnemies)
+        {
+            if (enemy != null) enemy.ExecuteAttack();
+        }
+
+        yield return new WaitForSeconds(0.4f); // 공격 연출 및 피격 대기 시간
+
+        // 3. 모든 처리가 끝났으니 다시 플레이어 턴으로 넘김
+        StartPlayerTurn();
+    }
+
+    // 적이 사망했을 때 리스트에서 제거
+    public void OnEnemyDead(EnemyBase enemy)
+    {
+        if (activeEnemies.Contains(enemy)) activeEnemies.Remove(enemy);
     }
 }
