@@ -14,9 +14,8 @@ public class TurnManager : MonoBehaviour
 
     void Start()
     {
-        // 1. 그리드 초기화 (5x7)
-        if (GridManager.Instance != null)
-            GridManager.Instance.SetupGrid(5, 7);
+        // [수정] 강제 크기 설정 삭제. 이제 GridManager의 Inspector 설정을 따릅니다.
+        // if (GridManager.Instance != null) GridManager.Instance.SetupGrid(5, 7); 
 
         // 2. 적 스폰
         SpawnEnemies();
@@ -33,7 +32,10 @@ public class TurnManager : MonoBehaviour
     void SpawnEnemies()
     {
         activeEnemies.Clear();
-        if (StageManager.Instance == null) return;
+        if (StageManager.Instance == null) return; // StageManager가 없으면 스폰 안 함 (테스트 시 주의)
+
+        // 에러 방지: StageManager가 없어도 테스트하려면 아래 주석을 해제하고 임의 코드를 넣으세요.
+        // 하지만 기획자님은 StageManager를 쓰시므로 유지합니다.
 
         int spawnCount = Random.Range(1, 3);
         List<int> availableX = Enumerable.Range(0, GridManager.Instance.width).ToList();
@@ -62,13 +64,13 @@ public class TurnManager : MonoBehaviour
 
         GridManager.Instance.ClearReservations();
 
-        // [핵심 수정] 1. 모든 적들이 현재 위치를 먼저 '선점' 합니다. (겹침 방지)
+        // 1. 모든 적들이 현재 위치를 먼저 선점 (겹침 방지)
         foreach (var enemy in activeEnemies)
         {
             if (enemy != null) GridManager.Instance.TryReserveTile(enemy.currentPos);
         }
 
-        // 2. 그 다음, 의도를 계산합니다. (이동 시에만 선점한 자리를 취소함)
+        // 2. 의도 계산
         foreach (var enemy in activeEnemies)
         {
             if (enemy != null) enemy.CalculateIntent();
@@ -106,6 +108,7 @@ public class TurnManager : MonoBehaviour
         if (activeEnemies.Contains(enemy)) activeEnemies.Remove(enemy);
     }
 
+    // [복구] 이 함수가 있어야 PlayerController 오류가 해결됩니다.
     public EnemyBase GetEnemyAt(Vector2Int p)
     {
         return activeEnemies.Find(e => e.currentPos == p);

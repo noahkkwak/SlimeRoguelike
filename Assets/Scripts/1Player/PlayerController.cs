@@ -9,7 +9,6 @@ public class PlayerController : MonoBehaviour
     public int currentHp;
     public int attackPower = 2;
 
-    // 초기값은 의미가 없어짐 (Start에서 덮어씌움)
     public Vector2Int currentPos;
 
     public PlayerAction SelectedAction => selectedAction;
@@ -25,22 +24,20 @@ public class PlayerController : MonoBehaviour
     {
         currentHp = maxHp;
 
-        // [수정] 맵 크기에 맞춰 중앙 하단으로 위치 자동 설정
+        // [중요] 맵 크기가 변해도 항상 중앙 하단에 위치하도록 자동 계산
         if (GridManager.Instance != null)
         {
-            int centerX = GridManager.Instance.width / 2; // 5칸이면 2
-            int bottomY = GridManager.Instance.height - 1; // 7칸이면 6
+            int centerX = GridManager.Instance.width / 2; // 예: 7칸이면 3 (0,1,2,[3],4,5,6)
+            int bottomY = GridManager.Instance.height - 1;
             currentPos = new Vector2Int(centerX, bottomY);
         }
 
         UpdateVisual();
     }
 
-    // 턴 시작 시 상태 리셋
     public void OnTurnStart()
     {
         if (isDead) return;
-
         selectedAction = PlayerAction.None;
         ClearIndicators();
     }
@@ -60,8 +57,7 @@ public class PlayerController : MonoBehaviour
     {
         Vector2Int next = currentPos + dir;
 
-        // 이동 조건: 맵 안쪽이고, 장애물이 없고, 플레이어는 맨 아랫줄(height-1)에서만 이동 가능
-        // (기획 의도에 따라 Y축 이동을 허용하려면 next.y 조건 수정)
+        // 플레이어는 맵의 맨 아랫줄(Height-1)에서만 이동 가능
         bool isBottomRow = (next.y == GridManager.Instance.height - 1);
 
         if (GridManager.Instance.IsWalkable(next) && isBottomRow)
@@ -95,11 +91,10 @@ public class PlayerController : MonoBehaviour
 
     void PerformAttack()
     {
-        // 전방 모든 칸 공격
         for (int y = currentPos.y - 1; y >= 0; y--)
         {
             Vector2Int tPos = new Vector2Int(currentPos.x, y);
-            if (GridManager.Instance.IsObstacle(tPos)) return; // 장애물에 막힘
+            if (GridManager.Instance.IsObstacle(tPos)) return;
 
             EnemyBase target = TurnManager.Instance.GetEnemyAt(tPos);
             if (target != null) { target.TakeDamage(attackPower); return; }
@@ -126,10 +121,10 @@ public class PlayerController : MonoBehaviour
         }
 
         currentHp -= finalDmg;
-        Debug.Log($"<color=red>[플레이어 피격]</color> 남은 HP: {currentHp}");
 
-        // [애니메이션 연결 포인트]
-        // GetComponentInChildren<Animator>().SetTrigger("Hit");
+        // 피격 애니메이션 (있으면)
+        var anim = GetComponentInChildren<Animator>();
+        if (anim) anim.SetTrigger("Hit");
 
         if (currentHp <= 0) { isDead = true; Debug.Log("<color=red>GAME OVER</color>"); }
     }
