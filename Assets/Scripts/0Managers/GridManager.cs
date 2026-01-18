@@ -6,11 +6,11 @@ public class GridManager : MonoBehaviour
     public static GridManager Instance;
 
     [Header("Grid Config")]
-    public int width = 5;
-    public int height = 7;
+    public int width = 7;
+    public int height = 5;
     public float cellSpacing = 2.0f;
-    public float unitHeight = 0.5f;
-    public float indicatorHeight = 0.05f;
+    public float unitHeight = 0.2f;
+    public float indicatorHeight = 0.1f;
 
     public Dictionary<Vector2Int, bool> ObstacleMap = new Dictionary<Vector2Int, bool>();
 

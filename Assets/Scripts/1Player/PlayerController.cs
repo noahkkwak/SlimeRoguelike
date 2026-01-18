@@ -8,9 +8,10 @@ public class PlayerController : MonoBehaviour
     public int maxHp = 10;
     public int currentHp;
     public int attackPower = 2;
-    public Vector2Int currentPos = new Vector2Int(3, 4);
 
-    // [중요] 외부에서 확인 가능하도록 public get 접근자 추가
+    // 초기값은 의미가 없어짐 (Start에서 덮어씌움)
+    public Vector2Int currentPos;
+
     public PlayerAction SelectedAction => selectedAction;
     private PlayerAction selectedAction = PlayerAction.None;
     private bool isDead = false;
@@ -23,18 +24,25 @@ public class PlayerController : MonoBehaviour
     void Start()
     {
         currentHp = maxHp;
+
+        // [수정] 맵 크기에 맞춰 중앙 하단으로 위치 자동 설정
+        if (GridManager.Instance != null)
+        {
+            int centerX = GridManager.Instance.width / 2; // 5칸이면 2
+            int bottomY = GridManager.Instance.height - 1; // 7칸이면 6
+            currentPos = new Vector2Int(centerX, bottomY);
+        }
+
         UpdateVisual();
     }
 
-    // [신규] 턴이 시작될 때 상태를 리셋하는 함수 (TurnManager가 호출)
+    // 턴 시작 시 상태 리셋
     public void OnTurnStart()
     {
         if (isDead) return;
 
-        // 방어 태세 등 이전 턴의 행동 상태 초기화
         selectedAction = PlayerAction.None;
         ClearIndicators();
-        // Debug.Log("플레이어 턴 시작: 상태 초기화 완료");
     }
 
     void Update()
@@ -51,7 +59,12 @@ public class PlayerController : MonoBehaviour
     void TryMove(Vector2Int dir)
     {
         Vector2Int next = currentPos + dir;
-        if (GridManager.Instance.IsWalkable(next) && next.y == 4)
+
+        // 이동 조건: 맵 안쪽이고, 장애물이 없고, 플레이어는 맨 아랫줄(height-1)에서만 이동 가능
+        // (기획 의도에 따라 Y축 이동을 허용하려면 next.y 조건 수정)
+        bool isBottomRow = (next.y == GridManager.Instance.height - 1);
+
+        if (GridManager.Instance.IsWalkable(next) && isBottomRow)
         {
             currentPos = next;
             UpdateVisual();
@@ -82,10 +95,12 @@ public class PlayerController : MonoBehaviour
 
     void PerformAttack()
     {
+        // 전방 모든 칸 공격
         for (int y = currentPos.y - 1; y >= 0; y--)
         {
             Vector2Int tPos = new Vector2Int(currentPos.x, y);
-            if (GridManager.Instance.IsObstacle(tPos)) return;
+            if (GridManager.Instance.IsObstacle(tPos)) return; // 장애물에 막힘
+
             EnemyBase target = TurnManager.Instance.GetEnemyAt(tPos);
             if (target != null) { target.TakeDamage(attackPower); return; }
         }
@@ -104,26 +119,24 @@ public class PlayerController : MonoBehaviour
     public void TakeDamage(int dmg)
     {
         int finalDmg = dmg;
-        // 방어 상태일 때만 대미지 감소
         if (selectedAction == PlayerAction.Defend)
         {
             finalDmg = Mathf.RoundToInt(dmg * 0.5f);
             Debug.Log($"<color=blue>[방어 성공]</color> 대미지 감소 ({dmg} -> {finalDmg})");
-            // 기획 의도: 방어는 '한 번 맞으면 풀리는' 게 아니라 '이번 턴 동안 유지'라면 여기서 selectedAction을 초기화하지 않습니다.
-            // 턴 시작 시(OnTurnStart)에 초기화되므로 이번 턴 적들의 집중 포화는 다 막습니다.
         }
 
         currentHp -= finalDmg;
         Debug.Log($"<color=red>[플레이어 피격]</color> 남은 HP: {currentHp}");
+
+        // [애니메이션 연결 포인트]
+        // GetComponentInChildren<Animator>().SetTrigger("Hit");
+
         if (currentHp <= 0) { isDead = true; Debug.Log("<color=red>GAME OVER</color>"); }
     }
 
     void FinishTurn()
     {
-        // 턴을 넘길 때는 인디케이터를 지우지 않음 (방어/공격 이펙트 유지 or 적 턴에 시각적 정보 필요 시)
-        // 단, 기획적으로 '방어 인디케이터'는 적이 때릴 때까지 보여야 하므로 유지.
         if (selectedAction != PlayerAction.Defend) ClearIndicators();
-
         TurnManager.Instance.OnPlayerActionCompleted();
     }
 
