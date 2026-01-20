@@ -42,7 +42,7 @@ public class EnemyBase : MonoBehaviour
         attackCooldownTimer = 0;
         animator = GetComponentInChildren<Animator>();
 
-        GridManager.Instance.RegisterUnit(currentPos, this); // 그리드 등록
+        GridManager.Instance.RegisterUnit(currentPos, this);
         UpdateVisual();
     }
 
@@ -67,14 +67,10 @@ public class EnemyBase : MonoBehaviour
         state = EnemyState.Ready;
         bool intentSet = false;
 
-        // 1. 공격 시도 (플레이어 OR 장애물)
+        // 1. 공격 시도
         if (attackCooldownTimer >= data.attackCycle)
         {
-            // [AI 업그레이드] 공격 대상 탐색
-            if (TrySetAttackIntent())
-            {
-                intentSet = true;
-            }
+            if (TrySetAttackIntent()) intentSet = true;
         }
 
         // 2. 이동 시도
@@ -90,77 +86,102 @@ public class EnemyBase : MonoBehaviour
         }
     }
 
-    // [신규] 공격 의도 수립 (플레이어 우선, 없으면 장애물 확인)
+    // 공격 대상 탐색 (곡사/직사 분기 처리)
     bool TrySetAttackIntent()
     {
-        // 내 공격 범위 안에 무엇이 있는지 확인
-        // (단순화를 위해 직선 공격만 예시로 구현)
-
         var player = FindObjectOfType<PlayerController>();
         bool targetFound = false;
 
-        // 공격 범위 스캔
-        for (int i = 1; i <= data.attackRange; i++)
+        // A. 직사 (Direct): 경로상의 첫 번째 장애물/플레이어 확인
+        if (data.attackType == AttackType.Direct)
         {
-            Vector2Int tPos = new Vector2Int(currentPos.x, currentPos.y + i);
-            var tile = GridManager.Instance.GetTile(tPos);
-            if (tile == null) break;
-
-            // 1. 플레이어 발견? -> 공격 확정
-            if (player != null && player.currentPos == tPos)
+            for (int i = 1; i <= data.attackRange; i++)
             {
-                targetFound = true;
-                break;
-            }
+                Vector2Int tPos = new Vector2Int(currentPos.x, currentPos.y + i);
+                var tile = GridManager.Instance.GetTile(tPos);
+                if (tile == null) break;
 
-            // 2. 장애물 발견?
-            if (tile.HasObstacle)
-            {
-                // 파괴 가능한 장애물이면 공격 대상으로 간주
-                if (tile.Obstacle.type == ObstacleType.Destructible || tile.Obstacle.type == ObstacleType.Explosive)
+                if ((player != null && player.currentPos == tPos) ||
+                    (tile.HasObstacle && tile.Obstacle.type != ObstacleType.Indestructible))
                 {
                     targetFound = true;
-                    Debug.Log($"<color=yellow>[AI]</color> {data.enemyName}: 장애물({tile.Obstacle.name}) 파괴 시도");
                     break;
                 }
-                // 파괴 불가능한 벽이면? 시야 막힘 -> 공격 포기
-                else if (tile.Obstacle.type == ObstacleType.Indestructible)
+                if (tile.HasObstacle && tile.Obstacle.type == ObstacleType.Indestructible) break; // 벽에 막힘
+            }
+        }
+        // B. 곡사 (Arcing): 사거리 끝(또는 맵 끝) 지점만 확인
+        else if (data.attackType == AttackType.Arcing)
+        {
+            // 목표 지점 계산 (내 위치 + 사거리)
+            // 단, 맵을 벗어나면 맵의 끝(height-1)을 타격
+            int targetY = Mathf.Min(currentPos.y + data.attackRange, GridManager.Instance.height - 1);
+            Vector2Int tPos = new Vector2Int(currentPos.x, targetY);
+
+            // 그곳에 플레이어가 있거나 파괴 가능한 장애물이 있으면 공격 의도 설정
+            if (GridManager.Instance.IsInsideGrid(tPos))
+            {
+                var tile = GridManager.Instance.GetTile(tPos);
+                if ((player != null && player.currentPos == tPos) ||
+                    (tile != null && tile.HasObstacle && tile.Obstacle.type != ObstacleType.Destructible))
                 {
-                    break;
+                    // 곡사는 보통 플레이어를 노리지만, 기획에 따라 무조건 쏘게 할 수도 있음.
+                    // 현재는 '사거리에 닿으면 무조건 쏨'으로 설정하여 압박감을 줌
+                    targetFound = true;
                 }
+                // 곡사는 빈 땅이어도 쏘는 경우가 많으므로(지역 장악), 일단 true로 설정해도 됨
+                targetFound = true;
             }
         }
 
         if (targetFound)
         {
-            SetAttackIntentRaw(); // 실제 공격 의도 설정
+            SetAttackIntentRaw();
             return true;
         }
-
         return false;
     }
 
+    // [핵심 수정] 실제 의도 데이터 채우기 및 인디케이터 표시
     void SetAttackIntentRaw()
     {
         currentIntent.type = IntentType.Attack;
         currentIntent.areaTargets.Clear();
         GridManager.Instance.TryReserveTile(currentPos);
 
-        // 인디케이터 표시 (장애물에 막히는 것 고려)
-        for (int i = 1; i <= data.attackRange; i++)
+        // A. 직사: 경로를 쭉 그림
+        if (data.attackType == AttackType.Direct)
         {
-            Vector2Int tPos = new Vector2Int(currentPos.x, currentPos.y + i);
-            var tile = GridManager.Instance.GetTile(tPos);
-            if (tile == null) break;
+            for (int i = 1; i <= data.attackRange; i++)
+            {
+                Vector2Int tPos = new Vector2Int(currentPos.x, currentPos.y + i);
+                var tile = GridManager.Instance.GetTile(tPos);
+                if (tile == null) break;
 
-            currentIntent.areaTargets.Add(tPos);
-            SpawnIndicator(attackIndicatorPrefab, tPos);
+                currentIntent.areaTargets.Add(tPos);
+                SpawnIndicator(attackIndicatorPrefab, tPos);
 
-            // 시야를 막는 장애물이면 거기까지만 표시
-            if (tile.HasObstacle) break;
+                if (tile.HasObstacle) break; // 시야 막힘
+            }
         }
+        // B. 곡사: 목표 지점 '하나'만 찍음 (경로 무시)
+        else if (data.attackType == AttackType.Arcing)
+        {
+            int targetY = Mathf.Min(currentPos.y + data.attackRange, GridManager.Instance.height - 1);
+            Vector2Int tPos = new Vector2Int(currentPos.x, targetY);
+
+            if (GridManager.Instance.IsInsideGrid(tPos))
+            {
+                currentIntent.areaTargets.Add(tPos);
+                SpawnIndicator(attackIndicatorPrefab, tPos);
+                Debug.Log($"<color=yellow>[의도]</color> {data.enemyName}: 곡사 조준 ({tPos})");
+            }
+        }
+
         Debug.Log($"<color=yellow>[의도]</color> {data.enemyName}: 공격 준비");
     }
+
+    // ... (이하 SetMoveIntent, ExecuteMove 등 기존 코드 유지) ...
 
     bool SetMoveIntent()
     {
@@ -198,11 +219,9 @@ public class EnemyBase : MonoBehaviour
 
         if (currentIntent.type == IntentType.Move)
         {
-            // [중요] 이동 시 그리드 정보 갱신
             GridManager.Instance.RemoveUnit(currentPos);
             currentPos = currentIntent.targetPos;
             GridManager.Instance.RegisterUnit(currentPos, this);
-
             moveCooldownTimer = 0;
             ClearIndicators();
             UpdateVisual();
@@ -228,7 +247,6 @@ public class EnemyBase : MonoBehaviour
         {
             attackCooldownTimer++;
         }
-
         state = EnemyState.Idle;
         currentIntent.type = IntentType.None;
     }
@@ -238,32 +256,30 @@ public class EnemyBase : MonoBehaviour
         var player = FindObjectOfType<PlayerController>();
         bool hit = false;
 
-        // 공격 범위 내 첫 번째 대상 타격 (플레이어 로직과 동일)
         foreach (Vector2Int targetPos in currentIntent.areaTargets)
         {
             var tile = GridManager.Instance.GetTile(targetPos);
             if (tile == null) continue;
 
-            // 1. 플레이어 피격
             if (player != null && player.currentPos == targetPos)
             {
                 player.TakeDamage(data.attackPower);
                 hit = true;
-                break; // 관통 불가
+                // 곡사는 범위 내 대상을 다 때리는지, 하나만 때리는지에 따라 break 여부 결정
+                // 현재는 단일 타겟팅이므로 break 해도 무방
+                break;
             }
 
-            // 2. 장애물 피격 (적이 장애물 부수기)
             if (tile.HasObstacle)
             {
                 tile.Obstacle.TakeDamage(data.attackPower);
                 hit = true;
-                break; // 관통 불가
+                break;
             }
         }
         if (!hit) Debug.Log($"<color=white>[빗나감]</color> {data.enemyName}");
     }
 
-    // --- 유틸리티 ---
     public void TakeDamage(int dmg)
     {
         currentHp -= dmg;
@@ -272,7 +288,7 @@ public class EnemyBase : MonoBehaviour
         {
             state = EnemyState.Dead;
             if (animator) animator.SetBool("IsDead", true);
-            GridManager.Instance.RemoveUnit(currentPos); // 사망 시 그리드 해제
+            GridManager.Instance.RemoveUnit(currentPos);
             TurnManager.Instance.OnEnemyDead(this);
             ClearIndicators();
             Destroy(gameObject, 0.5f);
@@ -289,20 +305,9 @@ public class EnemyBase : MonoBehaviour
     }
 
     public void AddStatus(StatusType t, int d) => activeEffects.Add(new StatusEffect(t, d));
-    void UpdateStatus()
-    {
-        for (int i = activeEffects.Count - 1; i >= 0; i--)
-            if (--activeEffects[i].duration <= 0) activeEffects.RemoveAt(i);
-    }
-    void SpawnIndicator(GameObject prefab, Vector2Int p)
-    {
-        if (prefab) activeIndicators.Add(Instantiate(prefab, GridManager.Instance.GetWorldPosition(p, GridManager.Instance.indicatorHeight), Quaternion.identity));
-    }
-    public void ClearIndicators()
-    {
-        foreach (var g in activeIndicators) if (g) Destroy(g);
-        activeIndicators.Clear();
-    }
+    void UpdateStatus() { for (int i = activeEffects.Count - 1; i >= 0; i--) if (--activeEffects[i].duration <= 0) activeEffects.RemoveAt(i); }
+    void SpawnIndicator(GameObject prefab, Vector2Int p) { if (prefab) activeIndicators.Add(Instantiate(prefab, GridManager.Instance.GetWorldPosition(p, GridManager.Instance.indicatorHeight), Quaternion.identity)); }
+    public void ClearIndicators() { foreach (var g in activeIndicators) if (g) Destroy(g); activeIndicators.Clear(); }
     void UpdateVisual() => transform.position = GridManager.Instance.GetWorldPosition(currentPos, GridManager.Instance.unitHeight);
     private void OnDestroy() => ClearIndicators();
 }
