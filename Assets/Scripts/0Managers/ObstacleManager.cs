@@ -11,8 +11,8 @@ public class ObstacleManager : MonoBehaviour
 
     [Header("Spawn Settings")]
     public List<GameObject> obstaclePrefabs; // 생성할 장애물 목록
-    public int minRow = 2; // 중앙 전장 시작 (0부터 시작하므로 3번째 줄)
-    public int maxRow = 4; // 중앙 전장 끝 (5번째 줄)
+    public int minRow = 1; // 중앙 전장 시작 (0부터 시작하므로 3번째 줄)
+    public int maxRow = 3; // 중앙 전장 끝 (5번째 줄)
     [Range(0, 100)] public int spawnChance = 40; // 장애물 생성 확률 (%)
 
     void Awake() => Instance = this;
