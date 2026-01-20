@@ -77,12 +77,14 @@ public class PlayerController : MonoBehaviour
         ClearIndicators();
     }
 
-    // [핵심 수정] 공격 판정 로직
+    // [핵심 수정] 공격 로직 + 방향 전달
     void PerformAttack()
     {
         Debug.Log($"<color=cyan>[플레이어 공격 발동]</color>");
 
-        // 내 앞(y-1)부터 0까지 순차 검색
+        // 플레이어 공격 방향: 위쪽 (Y 감소 방향) -> (0, -1)
+        Vector2Int attackDir = new Vector2Int(0, -1);
+
         for (int y = currentPos.y - 1; y >= 0; y--)
         {
             Vector2Int tPos = new Vector2Int(currentPos.x, y);
@@ -94,8 +96,9 @@ public class PlayerController : MonoBehaviour
             if (tile.HasObstacle)
             {
                 Debug.Log($"<color=orange>HIT OBSTACLE!</color> {tile.Obstacle.name}");
-                tile.Obstacle.TakeDamage(attackPower);
-                return; // [중요] 관통하지 않고 종료
+                // [수정] OnHit 호출 시 방향 전달
+                tile.Obstacle.OnHit(attackPower, attackDir);
+                return;
             }
 
             // 2. 적 발견?
@@ -103,7 +106,7 @@ public class PlayerController : MonoBehaviour
             {
                 Debug.Log($"<color=red>HIT ENEMY!</color> {tile.OccupyingUnit.data.enemyName}");
                 tile.OccupyingUnit.TakeDamage(attackPower);
-                return; // [중요] 관통하지 않고 종료
+                return;
             }
         }
         Debug.Log("공격이 허공을 갈랐습니다.");

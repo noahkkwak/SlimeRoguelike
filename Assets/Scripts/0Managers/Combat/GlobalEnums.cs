@@ -11,9 +11,18 @@ public enum MovePattern { Chase, MaintainDist, Flee }
 // [신규] 장애물 유형
 public enum ObstacleType
 {
-    Indestructible, // 파괴 불가 (벽)
-    Destructible,   // 파괴 가능 (상자)
-    Explosive       // 폭발성 (밀치면 터짐)
+    Indestructible,
+    Destructible,
+    Explosive       // [이게 밀리는 장애물로 사용됩니다]
+}
+
+// [신규] 충돌 시 발생할 효과 타입
+public enum CollisionEffect
+{
+    None,
+    DamageOnly,     // 피해만
+    StunOnly,       // 기절만
+    Both            // 피해 + 기절
 }
 
 // [신규] 영역(Zone) 유형
