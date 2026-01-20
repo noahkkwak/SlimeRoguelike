@@ -20,6 +20,15 @@ public class GridManager : MonoBehaviour
 
     void Awake() => Instance = this;
 
+    void Start()
+    {
+        // 딕셔너리가 비어있다면 초기화 진행
+        if (Tiles.Count == 0)
+        {
+            SetupGrid(width, height);
+        }
+    }
+
     public void SetupGrid(int w, int h)
     {
         width = w;
