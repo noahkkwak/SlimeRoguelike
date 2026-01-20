@@ -6,23 +6,24 @@ public class ObstacleManager : MonoBehaviour
     public static ObstacleManager Instance;
 
     [Header("Conveyor Settings")]
-    public int movePeriod = 2; // 이동 주기 (2턴)
+    public int movePeriod = 2;
     private int currentTurnCount = 0;
 
-    [Header("Spawn Settings")]
-    public List<GameObject> obstaclePrefabs; // 생성할 장애물 목록
-    public int minRow = 1; // 중앙 전장 시작 (0부터 시작하므로 3번째 줄)
-    public int maxRow = 3; // 중앙 전장 끝 (5번째 줄)
-    [Range(0, 100)] public int spawnChance = 40; // 장애물 생성 확률 (%)
+    [Header("Spawn Settings (Obstacle)")]
+    public List<GameObject> obstaclePrefabs;
+    public int minRow = 1;
+    public int maxRow = 3;
+    [Range(0, 100)] public int obstacleSpawnChance = 40;
+
+    [Header("Spawn Settings (Zone)")]
+    public List<GameObject> zonePrefabs;
+    [Range(0, 100)] public int zoneSpawnChance = 30;
 
     void Awake() => Instance = this;
 
-    // 턴 시작 시 호출 (TurnManager에서 부름)
     public void OnTurnStart()
     {
         currentTurnCount++;
-
-        // 2턴마다 이동 실행
         if (currentTurnCount % movePeriod == 0)
         {
             MoveConveyorBelt();
@@ -30,80 +31,133 @@ public class ObstacleManager : MonoBehaviour
         }
     }
 
-    // 1단계: 기존 장애물 왼쪽으로 밀기
     void MoveConveyorBelt()
     {
+        // ... (이동 로직은 기존과 동일하므로 생략, 그대로 유지해주세요) ...
+        // [이전 코드의 MoveConveyorBelt 내용을 그대로 쓰시면 됩니다]
         Debug.Log("<color=orange>[Conveyor]</color> 전장이 이동합니다!");
 
-        // 왼쪽부터 처리하면 덮어씌워질 위험이 있으므로,
-        // 이동할 장애물들의 정보를 먼저 싹 긁어모읍니다.
         List<ObstacleBase> movingObstacles = new List<ObstacleBase>();
+        List<ZoneBase> movingZones = new List<ZoneBase>();
 
         for (int x = 0; x < GridManager.Instance.width; x++)
         {
             for (int y = minRow; y <= maxRow; y++)
             {
                 var tile = GridManager.Instance.GetTile(new Vector2Int(x, y));
-                if (tile != null && tile.HasObstacle)
-                {
-                    movingObstacles.Add(tile.Obstacle);
-                }
+                if (tile == null) continue;
+
+                if (tile.HasObstacle) movingObstacles.Add(tile.Obstacle);
+                if (tile.Zone != null) movingZones.Add(tile.Zone);
             }
         }
 
-        // 수집된 장애물들을 이동시킴
         foreach (var obs in movingObstacles)
         {
-            // 그리드에서 일단 제거 (내 자리를 비움)
             GridManager.Instance.RemoveObstacle(obs.currentPos);
+            Vector2Int nextPos = obs.currentPos + Vector2Int.left;
 
-            Vector2Int nextPos = obs.currentPos + Vector2Int.left; // (-1, 0)
-
-            // 맵 밖으로 나가면 파괴
-            if (nextPos.x < 0)
-            {
-                Destroy(obs.gameObject); // 객체 파괴
-            }
+            if (nextPos.x < 0) Destroy(obs.gameObject);
             else
             {
-                // 새 위치로 정보 갱신
                 obs.currentPos = nextPos;
                 obs.transform.position = GridManager.Instance.GetWorldPosition(nextPos, GridManager.Instance.unitHeight);
-
-                // 새 위치의 그리드에 재등록
-                // (만약 거기에 누군가 있다면? 지금은 비어있다고 가정. 추후 충돌 처리 필요 시 여기서)
                 GridManager.Instance.RegisterObstacle(nextPos, obs);
+            }
+        }
+
+        foreach (var zone in movingZones)
+        {
+            GridManager.Instance.RemoveZone(zone.currentPos);
+            Vector2Int nextPos = zone.currentPos + Vector2Int.left;
+
+            if (nextPos.x < 0) Destroy(zone.gameObject);
+            else
+            {
+                zone.currentPos = nextPos;
+                zone.transform.position = GridManager.Instance.GetWorldPosition(nextPos, 0.02f);
+                GridManager.Instance.RegisterZone(nextPos, zone);
             }
         }
     }
 
-    // 2단계: 오른쪽 끝에 새 장애물 채우기
     void SpawnNewColumn()
     {
-        int spawnX = GridManager.Instance.width - 1; // 가장 오른쪽 열
-        int obstaclesInThisColumn = 0; // 한 열에 너무 많이 생기지 않게 제한
+        int spawnX = GridManager.Instance.width - 1;
+        int spawnedCount = 0;
 
-        // 2행~4행 사이를 순회
+        // 1. 장애물 생성
         for (int y = minRow; y <= maxRow; y++)
         {
-            // 최대 2개까지만 생성 (기획 의도 반영)
-            if (obstaclesInThisColumn >= 2) continue;
+            // [조건 1] 한 열에 최대 2개까지만 (총량 제한)
+            if (spawnedCount >= 2) break;
 
-            // 확률 체크
-            if (Random.Range(0, 100) < spawnChance)
+            // [조건 2] 기획자님 제안: 인접(상/하/좌) 장애물이 2개 이상이면 생성 금지
+            // 즉, 인접 장애물은 최대 1개여야 함
+            if (CountAdjacentObstacles(spawnX, y) >= 2)
+            {
+                continue; // 이번 칸은 건너뜀
+            }
+
+            if (Random.Range(0, 100) < obstacleSpawnChance)
             {
                 if (obstaclePrefabs.Count > 0)
                 {
-                    // 랜덤 프리팹 선택
-                    GameObject prefab = obstaclePrefabs[Random.Range(0, obstaclePrefabs.Count)];
-                    GameObject go = Instantiate(prefab);
-
-                    ObstacleBase obs = go.GetComponent<ObstacleBase>();
-                    obs.Initialize(new Vector2Int(spawnX, y));
-
-                    obstaclesInThisColumn++;
+                    SpawnObject(obstaclePrefabs, spawnX, y, true);
+                    spawnedCount++;
                 }
             }
+        }
+
+        // 2. 영역 생성 (장애물 없는 곳에)
+        for (int y = minRow; y <= maxRow; y++)
+        {
+            if (GridManager.Instance.IsObstacle(new Vector2Int(spawnX, y))) continue;
+
+            if (Random.Range(0, 100) < zoneSpawnChance)
+            {
+                if (zonePrefabs != null && zonePrefabs.Count > 0)
+                {
+                    SpawnObject(zonePrefabs, spawnX, y, false);
+                }
+            }
+        }
+    }
+
+    // [신규] 인접한 타일(좌, 상, 하)의 장애물 개수를 셉니다.
+    int CountAdjacentObstacles(int x, int y)
+    {
+        int count = 0;
+
+        // 1. 왼쪽 (x-1) : 방금 이동해서 자리 잡은 녀석 확인
+        if (GridManager.Instance.IsObstacle(new Vector2Int(x - 1, y))) count++;
+
+        // 2. 아래쪽 (y-1) : 이번 루프에서 방금 생성된 녀석 확인
+        if (GridManager.Instance.IsObstacle(new Vector2Int(x, y - 1))) count++;
+
+        // 3. 위쪽 (y+1) : 보통 아직 생성 전이지만, 혹시 모르니 체크
+        if (GridManager.Instance.IsObstacle(new Vector2Int(x, y + 1))) count++;
+
+        return count;
+    }
+
+    void SpawnObject(List<GameObject> prefabs, int x, int y, bool isObstacle)
+    {
+        if (prefabs.Count == 0) return;
+
+        GameObject prefab = prefabs[Random.Range(0, prefabs.Count)];
+        GameObject go = Instantiate(prefab);
+        Vector2Int pos = new Vector2Int(x, y);
+
+        if (isObstacle)
+        {
+            ObstacleBase obs = go.GetComponent<ObstacleBase>();
+            obs.Initialize(pos);
+        }
+        else
+        {
+            ZoneBase zone = go.GetComponent<ZoneBase>();
+            zone.Initialize(pos);
         }
     }
 }
