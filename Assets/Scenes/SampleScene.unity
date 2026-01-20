@@ -482,6 +482,7 @@ GameObject:
   - component: {fileID: 1716834971}
   - component: {fileID: 1716834968}
   - component: {fileID: 1716834970}
+  - component: {fileID: 1716834972}
   m_Layer: 0
   m_Name: Managers
   m_TagString: Untagged
@@ -498,7 +499,7 @@ Transform:
   m_GameObject: {fileID: 1716834966}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 2.0671954, y: -0.07553229, z: -2.7903574}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -561,6 +562,24 @@ MonoBehaviour:
   cellSpacing: 2
   unitHeight: 0.2
   indicatorHeight: 0.1
+--- !u!114 &1716834972
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1716834966}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9297009b567a5164ebd619d3577f0c14, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  movePeriod: 2
+  obstaclePrefabs:
+  - {fileID: 983870565094274103, guid: 616ac34b5d0c4cf43b0429f80106a93b, type: 3}
+  minRow: 1
+  maxRow: 3
+  spawnChance: 40
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

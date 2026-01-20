@@ -54,6 +54,11 @@ public class TurnManager : MonoBehaviour
     {
         currentState = TurnState.PlayerTurn;
 
+        if (ObstacleManager.Instance != null)
+        {
+            ObstacleManager.Instance.OnTurnStart();
+        }
+
         GridManager.Instance.ClearReservations();
 
         // 1. Àû ¼±Á¡
