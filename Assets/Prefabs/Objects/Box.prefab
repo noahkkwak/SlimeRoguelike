@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 8890092331479941259}
   - component: {fileID: 4004550811398944717}
   m_Layer: 0
-  m_Name: BaseObstacle
+  m_Name: Box
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -46,7 +46,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   objName: 
-  type: 0
+  type: 1
   maxHp: 1
   currentHp: 0
   currentPos: {x: 0, y: 0}
@@ -113,7 +113,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: c05ff4ce2bff073409fd22fa65b1192e, type: 2}
+  - {fileID: 2100000, guid: 70072bd9392549744afd34aefdbb7408, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0

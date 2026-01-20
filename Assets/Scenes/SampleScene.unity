@@ -577,9 +577,12 @@ MonoBehaviour:
   movePeriod: 2
   obstaclePrefabs:
   - {fileID: 983870565094274103, guid: 616ac34b5d0c4cf43b0429f80106a93b, type: 3}
+  - {fileID: 983870565094274103, guid: 4be841a555de0d949925c0efdea0c899, type: 3}
   minRow: 1
   maxRow: 3
-  spawnChance: 40
+  obstacleSpawnChance: 40
+  zonePrefabs: []
+  zoneSpawnChance: 30
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

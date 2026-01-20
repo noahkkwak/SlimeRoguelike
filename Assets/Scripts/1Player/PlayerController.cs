@@ -10,7 +10,6 @@ public class PlayerController : MonoBehaviour
     public int attackPower = 2;
 
     public Vector2Int currentPos;
-
     public PlayerAction SelectedAction => selectedAction;
     private PlayerAction selectedAction = PlayerAction.None;
     private bool isDead = false;
@@ -43,15 +42,10 @@ public class PlayerController : MonoBehaviour
     {
         if (isDead || TurnManager.Instance.currentState != TurnState.PlayerTurn) return;
 
-        // 이동은 즉시 실행 (전략적 위치 선점)
         if (Input.GetKeyDown(KeyCode.A)) TryMove(Vector2Int.left);
         if (Input.GetKeyDown(KeyCode.D)) TryMove(Vector2Int.right);
-
-        // 행동 선택
         if (Input.GetKeyDown(KeyCode.W)) SelectAction(PlayerAction.Attack);
         if (Input.GetKeyDown(KeyCode.S)) SelectAction(PlayerAction.Defend);
-
-        // 행동 확정 (Space 누르면 턴 종료 -> 공격은 나중에 실행됨)
         if (Input.GetKeyDown(KeyCode.Space) && selectedAction != PlayerAction.None) FinishTurn();
     }
 
@@ -64,8 +58,6 @@ public class PlayerController : MonoBehaviour
         {
             currentPos = next;
             UpdateVisual();
-
-            // 이동했다면 공격/방어는 못함 (행동 종료)
             selectedAction = PlayerAction.None;
             FinishTurn();
         }
@@ -79,33 +71,39 @@ public class PlayerController : MonoBehaviour
         else if (a == PlayerAction.Defend) ShowDefenseVisual();
     }
 
-    // [핵심 변경] TurnManager가 적 이동 후에 호출하는 함수
     public void ResolveBufferedAction()
     {
-        if (selectedAction == PlayerAction.Attack)
-        {
-            PerformAttack(); // 이제 적이 이동한 뒤에 때립니다!
-        }
-
+        if (selectedAction == PlayerAction.Attack) PerformAttack();
         ClearIndicators();
     }
 
+    // [핵심 수정] 공격 판정 로직
     void PerformAttack()
     {
         Debug.Log($"<color=cyan>[플레이어 공격 발동]</color>");
-        // 전방 모든 칸 공격
+
+        // 내 앞(y-1)부터 0까지 순차 검색
         for (int y = currentPos.y - 1; y >= 0; y--)
         {
             Vector2Int tPos = new Vector2Int(currentPos.x, y);
-            if (GridManager.Instance.IsObstacle(tPos)) return;
+            var tile = GridManager.Instance.GetTile(tPos);
 
-            // 적이 이동해 온 위치를 검사
-            EnemyBase target = TurnManager.Instance.GetEnemyAt(tPos);
-            if (target != null)
+            if (tile == null) continue;
+
+            // 1. 장애물 발견?
+            if (tile.HasObstacle)
             {
-                Debug.Log($"<color=red>HIT!</color> 이동해온 {target.data.enemyName} 요격 성공!");
-                target.TakeDamage(attackPower);
-                return;
+                Debug.Log($"<color=orange>HIT OBSTACLE!</color> {tile.Obstacle.name}");
+                tile.Obstacle.TakeDamage(attackPower);
+                return; // [중요] 관통하지 않고 종료
+            }
+
+            // 2. 적 발견?
+            if (tile.HasUnit)
+            {
+                Debug.Log($"<color=red>HIT ENEMY!</color> {tile.OccupyingUnit.data.enemyName}");
+                tile.OccupyingUnit.TakeDamage(attackPower);
+                return; // [중요] 관통하지 않고 종료
             }
         }
         Debug.Log("공격이 허공을 갈랐습니다.");
@@ -122,19 +120,23 @@ public class PlayerController : MonoBehaviour
         for (int y = currentPos.y - 1; y >= 0; y--)
         {
             Vector2Int tPos = new Vector2Int(currentPos.x, y);
-            if (GridManager.Instance.IsObstacle(tPos)) break;
-            activeIndicators.Add(Instantiate(attackIndicatorPrefab, GridManager.Instance.GetWorldPosition(tPos, GridManager.Instance.indicatorHeight), Quaternion.identity));
+            var tile = GridManager.Instance.GetTile(tPos);
+
+            if (tile != null)
+            {
+                // 인디케이터 생성
+                activeIndicators.Add(Instantiate(attackIndicatorPrefab, GridManager.Instance.GetWorldPosition(tPos, GridManager.Instance.indicatorHeight), Quaternion.identity));
+
+                // [시각적 디테일] 장애물이 있으면 거기까지만 표시하고 루프 종료 (시야 막힘)
+                if (tile.HasObstacle) break;
+            }
         }
     }
 
     public void TakeDamage(int dmg)
     {
         int finalDmg = dmg;
-        if (selectedAction == PlayerAction.Defend)
-        {
-            finalDmg = Mathf.RoundToInt(dmg * 0.5f);
-            Debug.Log($"<color=blue>[방어 성공]</color> 대미지 감소 ({dmg} -> {finalDmg})");
-        }
+        if (selectedAction == PlayerAction.Defend) finalDmg = Mathf.RoundToInt(dmg * 0.5f);
         currentHp -= finalDmg;
 
         var anim = GetComponentInChildren<Animator>();
@@ -145,7 +147,6 @@ public class PlayerController : MonoBehaviour
 
     void FinishTurn()
     {
-        // 인디케이터는 지우지 않고 유지 (공격 실행 시까지 보여줌)
         TurnManager.Instance.OnPlayerActionCompleted();
     }
 

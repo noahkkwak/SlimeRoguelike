@@ -33,8 +33,7 @@ public class ObstacleManager : MonoBehaviour
 
     void MoveConveyorBelt()
     {
-        // ... (이동 로직은 기존과 동일하므로 생략, 그대로 유지해주세요) ...
-        // [이전 코드의 MoveConveyorBelt 내용을 그대로 쓰시면 됩니다]
+        // ... (이동 로직은 기존과 100% 동일, 생략 없이 그대로 유지) ...
         Debug.Log("<color=orange>[Conveyor]</color> 전장이 이동합니다!");
 
         List<ObstacleBase> movingObstacles = new List<ObstacleBase>();
@@ -86,17 +85,17 @@ public class ObstacleManager : MonoBehaviour
         int spawnX = GridManager.Instance.width - 1;
         int spawnedCount = 0;
 
-        // 1. 장애물 생성
         for (int y = minRow; y <= maxRow; y++)
         {
-            // [조건 1] 한 열에 최대 2개까지만 (총량 제한)
             if (spawnedCount >= 2) break;
 
-            // [조건 2] 기획자님 제안: 인접(상/하/좌) 장애물이 2개 이상이면 생성 금지
-            // 즉, 인접 장애물은 최대 1개여야 함
-            if (CountAdjacentObstacles(spawnX, y) >= 2)
+            // [수정] 8방향 체크: 주변에 이미 2개 이상 있으면 생성 금지 (뭉침 방지)
+            if (CountObstaclesAround8(spawnX, y) >= 2) continue;
+
+            // [수정] 가로 연속 배치 방지: 바로 왼쪽에 장애물이 있으면 90% 확률로 생성 안 함
+            if (GridManager.Instance.IsObstacle(new Vector2Int(spawnX - 1, y)))
             {
-                continue; // 이번 칸은 건너뜀
+                if (Random.Range(0, 100) < 90) continue;
             }
 
             if (Random.Range(0, 100) < obstacleSpawnChance)
@@ -109,7 +108,7 @@ public class ObstacleManager : MonoBehaviour
             }
         }
 
-        // 2. 영역 생성 (장애물 없는 곳에)
+        // 영역 생성 (기존 유지)
         for (int y = minRow; y <= maxRow; y++)
         {
             if (GridManager.Instance.IsObstacle(new Vector2Int(spawnX, y))) continue;
@@ -117,47 +116,34 @@ public class ObstacleManager : MonoBehaviour
             if (Random.Range(0, 100) < zoneSpawnChance)
             {
                 if (zonePrefabs != null && zonePrefabs.Count > 0)
-                {
                     SpawnObject(zonePrefabs, spawnX, y, false);
-                }
             }
         }
     }
 
-    // [신규] 인접한 타일(좌, 상, 하)의 장애물 개수를 셉니다.
-    int CountAdjacentObstacles(int x, int y)
+    // [신규] 8방향 주변 장애물 개수 체크 (본인 제외)
+    int CountObstaclesAround8(int cx, int cy)
     {
         int count = 0;
-
-        // 1. 왼쪽 (x-1) : 방금 이동해서 자리 잡은 녀석 확인
-        if (GridManager.Instance.IsObstacle(new Vector2Int(x - 1, y))) count++;
-
-        // 2. 아래쪽 (y-1) : 이번 루프에서 방금 생성된 녀석 확인
-        if (GridManager.Instance.IsObstacle(new Vector2Int(x, y - 1))) count++;
-
-        // 3. 위쪽 (y+1) : 보통 아직 생성 전이지만, 혹시 모르니 체크
-        if (GridManager.Instance.IsObstacle(new Vector2Int(x, y + 1))) count++;
-
+        for (int x = cx - 1; x <= cx + 1; x++)
+        {
+            for (int y = cy - 1; y <= cy + 1; y++)
+            {
+                if (x == cx && y == cy) continue; // 나 자신 제외
+                if (GridManager.Instance.IsObstacle(new Vector2Int(x, y))) count++;
+            }
+        }
         return count;
     }
 
     void SpawnObject(List<GameObject> prefabs, int x, int y, bool isObstacle)
     {
         if (prefabs.Count == 0) return;
-
         GameObject prefab = prefabs[Random.Range(0, prefabs.Count)];
         GameObject go = Instantiate(prefab);
         Vector2Int pos = new Vector2Int(x, y);
 
-        if (isObstacle)
-        {
-            ObstacleBase obs = go.GetComponent<ObstacleBase>();
-            obs.Initialize(pos);
-        }
-        else
-        {
-            ZoneBase zone = go.GetComponent<ZoneBase>();
-            zone.Initialize(pos);
-        }
+        if (isObstacle) go.GetComponent<ObstacleBase>().Initialize(pos);
+        else go.GetComponent<ZoneBase>().Initialize(pos);
     }
 }
