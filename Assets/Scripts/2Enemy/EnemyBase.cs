@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections;
 using System.Collections.Generic;
 
 [System.Serializable]
@@ -21,6 +22,9 @@ public class EnemyBase : MonoBehaviour
     public int currentHp;
     public Vector2Int currentPos;
     public EnemyIntent currentIntent = new EnemyIntent();
+
+    [Header("Visual Settings")]
+    public float moveSpeed = 8f;
 
     [SerializeField] private int moveCooldownTimer = 0;
     [SerializeField] private int attackCooldownTimer = 0;
@@ -210,20 +214,43 @@ public class EnemyBase : MonoBehaviour
 
         if (currentIntent.type == IntentType.Move)
         {
+            // 1. 논리적 이동 (그리드 데이터 갱신) - 즉시 처리
             GridManager.Instance.RemoveUnit(currentPos);
             currentPos = currentIntent.targetPos;
             GridManager.Instance.RegisterUnit(currentPos, this);
+
             moveCooldownTimer = 0;
             ClearIndicators();
-            UpdateVisual();
 
-            // [핵심 구현] 이동 완료 후 정면 복귀
-            FaceDirection(defaultFacingDir);
+            // 2. 시각적 이동 (코루틴) - 부드럽게
+            if (animator) animator.SetTrigger("Move"); // [복구] 이동 애니메이션 실행
+
+            // 목표 월드 좌표 계산
+            Vector3 targetWorldPos = GridManager.Instance.GetWorldPosition(currentPos, GridManager.Instance.unitHeight);
+            StartCoroutine(MoveVisual(targetWorldPos));
         }
         else
         {
             if (currentIntent.type != IntentType.Attack) moveCooldownTimer++;
         }
+    }
+
+    // [신규] 부드러운 이동 처리
+    IEnumerator MoveVisual(Vector3 targetPos)
+    {
+        // 도착할 때까지 이동
+        while (Vector3.Distance(transform.position, targetPos) > 0.05f)
+        {
+            transform.position = Vector3.MoveTowards(transform.position, targetPos, moveSpeed * Time.deltaTime);
+            yield return null;
+        }
+
+        // 도착 후 위치 보정
+        transform.position = targetPos;
+
+        // [중요] 이동이 끝난 후에야 정면을 바라봄
+        // (이동 중에는 옆을 보고 있어야 자연스럽기 때문)
+        FaceDirection(defaultFacingDir);
     }
 
     public void ExecuteAttack()

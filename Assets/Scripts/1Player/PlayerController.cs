@@ -184,11 +184,31 @@ public class PlayerController : MonoBehaviour
     public void TakeDamage(int dmg)
     {
         int finalDmg = dmg;
-        if (selectedAction == PlayerAction.Defend) finalDmg = Mathf.RoundToInt(dmg * 0.5f);
+        bool isBlocked = false; // 방어 성공 여부 체크
+
+        if (selectedAction == PlayerAction.Defend)
+        {
+            finalDmg = Mathf.RoundToInt(dmg * 0.5f);
+            isBlocked = true; // 방어 성공!
+            Debug.Log("<color=blue>[방어]</color> 대미지 경감!");
+        }
 
         currentHp -= finalDmg;
 
-        if (animator) animator.SetTrigger("Hit");
+        // [수정] 방어 여부에 따라 다른 애니메이션 재생
+        if (animator)
+        {
+            if (isBlocked)
+            {
+                // 가드 성공 모션 (팅겨내기)
+                animator.SetTrigger("Block");
+            }
+            else
+            {
+                // 일반 피격 모션 (아파하기)
+                animator.SetTrigger("Hit");
+            }
+        }
 
         if (currentHp <= 0)
         {
