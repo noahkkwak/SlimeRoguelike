@@ -51,9 +51,11 @@ MonoBehaviour:
   currentHp: 0
   currentPos: {x: 0, y: 0}
   IsWalkable: 0
-  isPushable: 0
+  isPushable: 1
   collisionDamage: 1
   collisionEffect: 1
+  slideSpeed: 15
+  destroyDelayAfterCrash: 0.1
 --- !u!1 &1975080883100590883
 GameObject:
   m_ObjectHideFlags: 0
