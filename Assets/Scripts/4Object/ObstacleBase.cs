@@ -1,5 +1,5 @@
 using UnityEngine;
-using System.Collections; // 코루틴 사용을 위해 필요
+using System.Collections;
 
 public class ObstacleBase : MonoBehaviour
 {
@@ -17,8 +17,8 @@ public class ObstacleBase : MonoBehaviour
     public CollisionEffect collisionEffect = CollisionEffect.DamageOnly;
 
     [Header("Visual Settings")]
-    public float slideSpeed = 15f; // 밀리는 속도 (빠를수록 타격감 좋음)
-    public float destroyDelayAfterCrash = 0.1f; // 충돌 후 잠시 멈췄다 사라짐
+    public float slideSpeed = 15f;
+    public float destroyDelayAfterCrash = 0.1f;
 
     public void Initialize(Vector2Int pos)
     {
@@ -34,7 +34,7 @@ public class ObstacleBase : MonoBehaviour
 
         if (isPushable)
         {
-            // 밀리는 녀석은 데미지 대신 이동 처리
+            // 밀리는 장애물은 대미지 0이어도 물리력(방향)만 있으면 밀림
             SlideAndCollide(attackDirection);
         }
         else
@@ -55,21 +55,25 @@ public class ObstacleBase : MonoBehaviour
         Destroy(gameObject);
     }
 
-    // [핵심 수정] 논리 계산과 시각적 연출의 분리
     void SlideAndCollide(Vector2Int direction)
     {
-        // 1. 논리적 처리: 일단 그리드에서 나는 사라짐 (내 자리는 비워짐)
+        // 1. 그리드에서 나를 지움 (이동 시작)
         GridManager.Instance.RemoveObstacle(currentPos);
 
         Vector2Int checkPos = currentPos;
-        bool collided = false;
 
-        // 충돌 대상 정보
+        bool collided = false; // 벽/적/플레이어와 충돌해서 터져야 하는가?
+        bool momentumTransferred = false; // 다른 장애물에게 운동 에너지를 넘겨줬는가?
+
         EnemyBase hitEnemy = null;
+        PlayerController hitPlayer = null; // [추가] 플레이어 피격
         ObstacleBase hitObstacle = null;
         Vector3 targetVisualPos = transform.position;
 
-        // 2. 미래 예측: 어디까지 미끄러질지 미리 계산
+        // 플레이어 참조 가져오기
+        var player = FindObjectOfType<PlayerController>();
+
+        // 2. 경로 탐색
         while (true)
         {
             Vector2Int nextPos = checkPos + direction;
@@ -77,8 +81,6 @@ public class ObstacleBase : MonoBehaviour
             // A. 맵 밖으로 나감
             if (!GridManager.Instance.IsInsideGrid(nextPos))
             {
-                // [기획 반영] 맵 밖으로 나가도 시각적으로는 멀리까지 날아가야 함
-                // 방향대로 10칸 정도 더 멀리 날려보냄
                 targetVisualPos = GridManager.Instance.GetWorldPosition(nextPos + (direction * 5), GridManager.Instance.unitHeight);
                 collided = false;
                 break;
@@ -86,13 +88,12 @@ public class ObstacleBase : MonoBehaviour
 
             var tile = GridManager.Instance.GetTile(nextPos);
 
-            // B. 장애물 충돌
-            if (tile.HasObstacle)
+            // B. 플레이어 충돌 [신규 구현]
+            if (player != null && player.currentPos == nextPos)
             {
-                hitObstacle = tile.Obstacle;
+                hitPlayer = player;
                 targetVisualPos = GridManager.Instance.GetWorldPosition(nextPos, GridManager.Instance.unitHeight);
-                // 겹치지 않게 살짝 전(0.8칸)에서 멈추는 디테일? or 그냥 들이박기? -> 일단 들이박기(해당 위치)
-                collided = true;
+                collided = true; // 플레이어랑 박으면 터짐
                 break;
             }
 
@@ -101,67 +102,119 @@ public class ObstacleBase : MonoBehaviour
             {
                 hitEnemy = tile.OccupyingUnit;
                 targetVisualPos = GridManager.Instance.GetWorldPosition(nextPos, GridManager.Instance.unitHeight);
-                collided = true;
+                collided = true; // 적이랑 박으면 터짐
                 break;
             }
 
-            // D. 빈 공간 -> 계속 이동
+            // D. 장애물 충돌 [연쇄 밀치기 구현]
+            if (tile.HasObstacle)
+            {
+                ObstacleBase targetObs = tile.Obstacle;
+
+                if (targetObs.isPushable)
+                {
+                    // [연쇄 작용] 상대방도 밀리는 놈이라면?
+                    // 나는 여기서 멈추고(폭발 X), 상대를 민다. (당구공 효과)
+                    targetVisualPos = GridManager.Instance.GetWorldPosition(checkPos, GridManager.Instance.unitHeight); // 충돌 직전 위치(checkPos)에 멈춤
+
+                    // 상대방에게 운동 에너지 전달 (재귀적 호출과 유사 효과)
+                    Debug.Log($"<color=cyan>[Chain Push]</color> {objName} -> {targetObs.objName}");
+                    targetObs.OnHit(0, direction);
+
+                    // 나는 터지지 않음. 그냥 자리를 잡음.
+                    collided = false;
+                    momentumTransferred = true;
+
+                    // 내 위치 갱신 (checkPos에 안착)
+                    currentPos = checkPos;
+                    // 주의: 이동 루프는 여기서 끝내야 함
+                    break;
+                }
+                else
+                {
+                    // 벽(파괴 불가 등)이면 그냥 들이박고 터짐
+                    hitObstacle = targetObs;
+                    targetVisualPos = GridManager.Instance.GetWorldPosition(nextPos, GridManager.Instance.unitHeight);
+                    collided = true;
+                    break;
+                }
+            }
+
+            // E. 빈 공간 -> 계속 이동
             checkPos = nextPos;
         }
 
-        // 3. 시각적 연출 시작 (코루틴)
-        StartCoroutine(ProcessSlideVisuals(targetVisualPos, collided, hitEnemy, hitObstacle));
+        StartCoroutine(ProcessSlideVisuals(targetVisualPos, collided, momentumTransferred, hitEnemy, hitPlayer, hitObstacle));
     }
 
-    IEnumerator ProcessSlideVisuals(Vector3 targetPos, bool isCrash, EnemyBase hitEnemy, ObstacleBase hitObstacle)
+    IEnumerator ProcessSlideVisuals(Vector3 targetPos, bool isCrash, bool momentumTransferred, EnemyBase hitEnemy, PlayerController hitPlayer, ObstacleBase hitObstacle)
     {
-        // A. 목표 지점까지 고속 이동
+        // 이동 연출
         while (Vector3.Distance(transform.position, targetPos) > 0.1f)
         {
             transform.position = Vector3.MoveTowards(transform.position, targetPos, slideSpeed * Time.deltaTime);
             yield return null;
         }
+        transform.position = targetPos; // 위치 보정
 
-        // B. 상황별 처리
+        // 1. 충돌 폭발 (적/플레이어/벽)
         if (isCrash)
         {
-            // 충돌 시점에 대미지/효과 적용 (타격감 싱크 맞추기)
             if (hitEnemy != null)
             {
-                Debug.Log($"<color=red>[쾅!]</color> {objName} -> {hitEnemy.data.enemyName}");
+                Debug.Log($"<color=red>[Crash]</color> {objName} -> Enemy({hitEnemy.data.enemyName})");
                 ApplyCollisionEffect(hitEnemy);
+            }
+            if (hitPlayer != null)
+            {
+                Debug.Log($"<color=red>[Crash]</color> {objName} -> Player");
+                ApplyCollisionEffect(hitPlayer);
             }
             if (hitObstacle != null)
             {
-                Debug.Log($"<color=red>[쾅!]</color> {objName} -> {hitObstacle.objName}");
+                Debug.Log($"<color=red>[Crash]</color> {objName} -> Obstacle({hitObstacle.objName})");
                 ApplyCollisionEffect(hitObstacle);
             }
 
-            // 잠시 멈췄다가 소멸 (충격 연출)
             yield return new WaitForSeconds(destroyDelayAfterCrash);
-            Destroy(gameObject);
+            Destroy(gameObject); // 자폭
         }
+        // 2. 연쇄 밀치기 (당구공)
+        else if (momentumTransferred)
+        {
+            // 나는 터지지 않고 이 자리에 멈춤
+            // 그리드에 다시 나를 등록해야 함 (아까 Remove했으므로)
+            GridManager.Instance.RegisterObstacle(currentPos, this);
+        }
+        // 3. 맵 밖으로 나감
         else
         {
-            // 맵 밖으로 나가는 경우: 이미 충분히 멀리 날아갔으므로 자연스럽게 소멸
-            // (위 while문에서 targetPos를 아주 멀리 잡았으므로 여기까지 오면 화면 밖임)
-            Debug.Log($"<color=cyan>[Out]</color> {objName} 장외 홈런");
+            // 그리드 등록 안 함 (이미 Remove됨)
             Destroy(gameObject);
         }
     }
 
+    // --- 효과 적용 오버로딩 ---
+
     void ApplyCollisionEffect(EnemyBase target)
+    {
+        if (collisionEffect == CollisionEffect.DamageOnly || collisionEffect == CollisionEffect.Both) target.TakeDamage(collisionDamage);
+        if (collisionEffect == CollisionEffect.StunOnly || collisionEffect == CollisionEffect.Both) target.ApplyCollision(0);
+    }
+
+    // [신규] 플레이어에게 효과 적용
+    void ApplyCollisionEffect(PlayerController target)
     {
         if (collisionEffect == CollisionEffect.DamageOnly || collisionEffect == CollisionEffect.Both)
             target.TakeDamage(collisionDamage);
 
-        if (collisionEffect == CollisionEffect.StunOnly || collisionEffect == CollisionEffect.Both)
-            target.ApplyCollision(0);
+        // 플레이어 기절 로직은 아직 없으므로 데미지만 처리하거나, 추후 추가
+        // if (collisionEffect == Stun...) target.Stun();
     }
 
     void ApplyCollisionEffect(ObstacleBase target)
     {
-        if (collisionEffect == CollisionEffect.DamageOnly || collisionEffect == CollisionEffect.Both)
-            target.TakeDamage(collisionDamage);
+        // 벽 같은 것에 박았을 때
+        target.TakeDamage(collisionDamage);
     }
 }
