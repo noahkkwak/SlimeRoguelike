@@ -576,7 +576,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   movePeriod: 2
   obstaclePrefabs:
-  - {fileID: 983870565094274103, guid: 4be841a555de0d949925c0efdea0c899, type: 3}
   - {fileID: 983870565094274103, guid: 3f05381df6df4174eb9aba92ed2cdb22, type: 3}
   minRow: 1
   maxRow: 3

@@ -1,10 +1,11 @@
 using UnityEngine;
+using System.Collections;
 using System.Collections.Generic;
 
 public class PlayerController : MonoBehaviour
 {
     [Header("Stats")]
-    public string charName = "Slime";
+    public string charName = "Player";
     public int maxHp = 10;
     public int currentHp;
     public int attackPower = 2;
@@ -14,21 +15,39 @@ public class PlayerController : MonoBehaviour
     private PlayerAction selectedAction = PlayerAction.None;
     private bool isDead = false;
 
-    [Header("Visuals")]
+    [Header("Visuals & Animation")]
+    public float moveSpeed = 10f; // 이동 속도
+    private Animator animator;    // 애니메이터 참조
+    private bool isMovingVisual = false; // 이동 중 입력 방지
+
     public GameObject attackIndicatorPrefab;
     public GameObject defenseIndicatorPrefab;
     private List<GameObject> activeIndicators = new List<GameObject>();
 
     void Start()
     {
+        animator = GetComponentInChildren<Animator>();
         currentHp = maxHp;
-        if (GridManager.Instance != null)
-        {
-            int centerX = GridManager.Instance.width / 2;
-            int bottomY = GridManager.Instance.height - 1;
-            currentPos = new Vector2Int(centerX, bottomY);
-        }
-        UpdateVisual();
+
+        // GridManager 초기화 안전장치
+        if (GridManager.Instance != null && GridManager.Instance.Tiles.Count > 0)
+            InitPosition();
+        else
+            StartCoroutine(WaitForGrid());
+    }
+
+    IEnumerator WaitForGrid()
+    {
+        yield return null;
+        InitPosition();
+    }
+
+    void InitPosition()
+    {
+        int centerX = GridManager.Instance.width / 2;
+        int bottomY = GridManager.Instance.height - 1;
+        currentPos = new Vector2Int(centerX, bottomY);
+        transform.position = GridManager.Instance.GetWorldPosition(currentPos, GridManager.Instance.unitHeight);
     }
 
     public void OnTurnStart()
@@ -36,16 +55,29 @@ public class PlayerController : MonoBehaviour
         if (isDead) return;
         selectedAction = PlayerAction.None;
         ClearIndicators();
+
+        // 턴 시작 시 방어 자세 등 초기화
+        if (animator)
+        {
+            animator.SetBool("IsGuarding", false);
+            animator.SetBool("IsAiming", false);
+        }
     }
 
     void Update()
     {
         if (isDead || TurnManager.Instance.currentState != TurnState.PlayerTurn) return;
+        if (isMovingVisual) return;
 
+        // 이동 (A/D)
         if (Input.GetKeyDown(KeyCode.A)) TryMove(Vector2Int.left);
         if (Input.GetKeyDown(KeyCode.D)) TryMove(Vector2Int.right);
+
+        // 행동 선택 (W: 공격준비, S: 방어준비)
         if (Input.GetKeyDown(KeyCode.W)) SelectAction(PlayerAction.Attack);
         if (Input.GetKeyDown(KeyCode.S)) SelectAction(PlayerAction.Defend);
+
+        // 행동 확정 (Space)
         if (Input.GetKeyDown(KeyCode.Space) && selectedAction != PlayerAction.None) FinishTurn();
     }
 
@@ -57,16 +89,52 @@ public class PlayerController : MonoBehaviour
         if (GridManager.Instance.IsWalkable(next) && isBottomRow)
         {
             currentPos = next;
-            UpdateVisual();
+
+            // [애니메이션] 이동 시 준비 자세들 모두 해제
+            if (animator)
+            {
+                animator.SetBool("IsAiming", false);
+                animator.SetBool("IsGuarding", false);
+                animator.SetTrigger("Move");
+            }
+
+            // [시각적] 부드러운 이동 실행
+            StartCoroutine(MoveVisual(GridManager.Instance.GetWorldPosition(currentPos, GridManager.Instance.unitHeight)));
+
             selectedAction = PlayerAction.None;
             FinishTurn();
         }
+    }
+
+    IEnumerator MoveVisual(Vector3 targetPos)
+    {
+        isMovingVisual = true;
+        while (Vector3.Distance(transform.position, targetPos) > 0.05f)
+        {
+            transform.position = Vector3.MoveTowards(transform.position, targetPos, moveSpeed * Time.deltaTime);
+            yield return null;
+        }
+        transform.position = targetPos;
+        isMovingVisual = false;
     }
 
     void SelectAction(PlayerAction a)
     {
         ClearIndicators();
         selectedAction = a;
+
+        // [애니메이션] 준비 단계 (State 유지)
+        if (animator)
+        {
+            // 일단 다 끄고
+            animator.SetBool("IsAiming", false);
+            animator.SetBool("IsGuarding", false);
+
+            // 선택된 것만 킴
+            if (a == PlayerAction.Attack) animator.SetBool("IsAiming", true);
+            else if (a == PlayerAction.Defend) animator.SetBool("IsGuarding", true);
+        }
+
         if (a == PlayerAction.Attack) ShowAttackRange();
         else if (a == PlayerAction.Defend) ShowDefenseVisual();
     }
@@ -74,34 +142,36 @@ public class PlayerController : MonoBehaviour
     public void ResolveBufferedAction()
     {
         if (selectedAction == PlayerAction.Attack) PerformAttack();
+
         ClearIndicators();
+        // 참고: 방어(IsGuarding)나 조준(IsAiming) 해제 시점은 PerformAttack 혹은 OnTurnStart에서 처리
     }
 
-    // [핵심 수정] 공격 로직 + 방향 전달
     void PerformAttack()
     {
         Debug.Log($"<color=cyan>[플레이어 공격 발동]</color>");
 
-        // 플레이어 공격 방향: 위쪽 (Y 감소 방향) -> (0, -1)
-        Vector2Int attackDir = new Vector2Int(0, -1);
+        // [애니메이션] 실행 단계
+        if (animator)
+        {
+            animator.SetBool("IsAiming", false); // 조준 끝
+            animator.SetTrigger("Attack");       // 공격!
+        }
+
+        Vector2Int attackDir = new Vector2Int(0, -1); // 위쪽으로 공격
 
         for (int y = currentPos.y - 1; y >= 0; y--)
         {
             Vector2Int tPos = new Vector2Int(currentPos.x, y);
             var tile = GridManager.Instance.GetTile(tPos);
-
             if (tile == null) continue;
 
-            // 1. 장애물 발견?
             if (tile.HasObstacle)
             {
                 Debug.Log($"<color=orange>HIT OBSTACLE!</color> {tile.Obstacle.name}");
-                // [수정] OnHit 호출 시 방향 전달
-                tile.Obstacle.OnHit(attackPower, attackDir);
+                tile.Obstacle.OnHit(attackPower, attackDir); // 밀치기 방향 전달
                 return;
             }
-
-            // 2. 적 발견?
             if (tile.HasUnit)
             {
                 Debug.Log($"<color=red>HIT ENEMY!</color> {tile.OccupyingUnit.data.enemyName}");
@@ -109,7 +179,23 @@ public class PlayerController : MonoBehaviour
                 return;
             }
         }
-        Debug.Log("공격이 허공을 갈랐습니다.");
+    }
+
+    public void TakeDamage(int dmg)
+    {
+        int finalDmg = dmg;
+        if (selectedAction == PlayerAction.Defend) finalDmg = Mathf.RoundToInt(dmg * 0.5f);
+
+        currentHp -= finalDmg;
+
+        if (animator) animator.SetTrigger("Hit");
+
+        if (currentHp <= 0)
+        {
+            isDead = true;
+            if (animator) animator.SetBool("IsDead", true);
+            Debug.Log("<color=red>GAME OVER</color>");
+        }
     }
 
     void ShowDefenseVisual()
@@ -127,32 +213,12 @@ public class PlayerController : MonoBehaviour
 
             if (tile != null)
             {
-                // 인디케이터 생성
                 activeIndicators.Add(Instantiate(attackIndicatorPrefab, GridManager.Instance.GetWorldPosition(tPos, GridManager.Instance.indicatorHeight), Quaternion.identity));
-
-                // [시각적 디테일] 장애물이 있으면 거기까지만 표시하고 루프 종료 (시야 막힘)
                 if (tile.HasObstacle) break;
             }
         }
     }
 
-    public void TakeDamage(int dmg)
-    {
-        int finalDmg = dmg;
-        if (selectedAction == PlayerAction.Defend) finalDmg = Mathf.RoundToInt(dmg * 0.5f);
-        currentHp -= finalDmg;
-
-        var anim = GetComponentInChildren<Animator>();
-        if (anim) anim.SetTrigger("Hit");
-
-        if (currentHp <= 0) { isDead = true; Debug.Log("<color=red>GAME OVER</color>"); }
-    }
-
-    void FinishTurn()
-    {
-        TurnManager.Instance.OnPlayerActionCompleted();
-    }
-
+    void FinishTurn() { TurnManager.Instance.OnPlayerActionCompleted(); }
     void ClearIndicators() { foreach (var g in activeIndicators) Destroy(g); activeIndicators.Clear(); }
-    void UpdateVisual() => transform.position = GridManager.Instance.GetWorldPosition(currentPos, GridManager.Instance.unitHeight);
 }
