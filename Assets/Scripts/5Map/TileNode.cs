@@ -1,20 +1,31 @@
-using Unity.VisualScripting;
 using UnityEngine;
 
-// 타일 하나에 대한 상세 정보
 [System.Serializable]
 public class TileNode
 {
-    public Vector2Int Coordinate; // 좌표
+    public Vector2Int Coordinate;
+    public bool IsWalkable; // 대문자 I로 수정 (표준)
 
-    // 이 타일에 있는 존재들 (교체 가능하므로 null 체크 필수)
-    public EnemyBase OccupyingUnit = null;      // 적
-    public ObstacleBase Obstacle = null;        // 장애물
-    public ZoneBase Zone = null;                // 영역 (장판)
-    public ItemBase Item = null;                // 바닥에 떨어진 아이템
+    // 이 타일 위에 있는 것들
+    public EnemyBase OccupyingUnit;
+    public ObstacleBase Obstacle;
+    public ZoneBase Zone;
+    public ItemBase Item; // [신규] 아이템 슬롯 추가
 
-    // 상태 확인용 헬퍼
-    public bool IsBlocked => OccupyingUnit != null || (Obstacle != null && !Obstacle.IsWalkable);
-    public bool HasObstacle => Obstacle != null;
+    // [신규] 생성자 (오류 CS1729 해결)
+    public TileNode(Vector2Int coord, bool walkable)
+    {
+        this.Coordinate = coord;
+        this.IsWalkable = walkable;
+        this.OccupyingUnit = null;
+        this.Obstacle = null;
+        this.Zone = null;
+        this.Item = null;
+    }
+
+    // 편의 속성
     public bool HasUnit => OccupyingUnit != null;
+    public bool HasObstacle => Obstacle != null;
+    public bool HasZone => Zone != null;
+    public bool HasItem => Item != null;
 }

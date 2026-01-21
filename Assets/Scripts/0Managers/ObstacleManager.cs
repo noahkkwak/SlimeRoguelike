@@ -35,6 +35,7 @@ public class ObstacleManager : MonoBehaviour
     {
         // ... (이동 로직은 기존과 100% 동일, 생략 없이 그대로 유지) ...
         Debug.Log("<color=orange>[Conveyor]</color> 전장이 이동합니다!");
+        GridManager.Instance.ShiftTerrain();
 
         List<ObstacleBase> movingObstacles = new List<ObstacleBase>();
         List<ZoneBase> movingZones = new List<ZoneBase>();
