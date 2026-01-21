@@ -1,248 +1,165 @@
-using UnityEngine;
 using System.Collections;
-using System.Collections.Generic;
+using UnityEngine;
 
 public class PlayerController : MonoBehaviour
 {
-    [Header("Stats")]
-    public string charName = "Player";
-    public int maxHp = 10;
-    public int currentHp;
-    public int attackPower = 2;
+    [Header("Movement Settings")]
+    [SerializeField] private float moveDuration = 0.2f;  // 이동 시간
+    [SerializeField] private float gridSize = 1f;        // 그리드 크기
+    [SerializeField] private LayerMask obstacleLayer;    // 장애물 레이어
 
-    public Vector2Int currentPos;
-    public PlayerAction SelectedAction => selectedAction;
-    private PlayerAction selectedAction = PlayerAction.None;
-    private bool isDead = false;
+    [Header("Sprite Settings")]
+    [Tooltip("체크 해제: 원본이 오른쪽 봄 / 체크: 원본이 왼쪽 봄")]
+    [SerializeField] private bool spriteOriginalFaceLeft = false;
 
-    [Header("Visuals & Animation")]
-    public float moveSpeed = 10f; // 이동 속도
-    private Animator animator;    // 애니메이터 참조
-    private bool isMovingVisual = false; // 이동 중 입력 방지
+    [Header("Status")]
+    [SerializeField] private int maxHealth = 3;
+    private int currentHealth;
 
-    public GameObject attackIndicatorPrefab;
-    public GameObject defenseIndicatorPrefab;
-    private List<GameObject> activeIndicators = new List<GameObject>();
+    [Header("Components")]
+    [SerializeField] private SpriteRenderer spriteRenderer;
+    [SerializeField] private Animator animator;
 
-    void Start()
+    // 외부 참조용 (EnemyBase, TurnManager 등에서 사용)
+    public Vector2Int currentPos => new Vector2Int(Mathf.RoundToInt(transform.position.x), Mathf.RoundToInt(transform.position.y));
+
+    private bool isMoving = false;
+    private Vector3? bufferedMoveInput = null;
+
+    private void Awake()
     {
-        animator = GetComponentInChildren<Animator>();
-        currentHp = maxHp;
+        // 컴포넌트 자동 할당
+        if (spriteRenderer == null) spriteRenderer = GetComponentInChildren<SpriteRenderer>();
+        if (animator == null) animator = GetComponentInChildren<Animator>();
 
-        // GridManager 초기화 안전장치
-        if (GridManager.Instance != null && GridManager.Instance.Tiles.Count > 0)
-            InitPosition();
-        else
-            StartCoroutine(WaitForGrid());
+        currentHealth = maxHealth;
+
+        if (spriteRenderer == null) Debug.LogError("PlayerController: SpriteRenderer가 없습니다.");
     }
 
-    IEnumerator WaitForGrid()
+    private void Start()
     {
-        yield return null;
-        InitPosition();
+        // [초기 시선 처리] 게임 시작 시 화면 중앙(적 방향)을 바라보게 설정
+        float initialDir = transform.position.x < 0 ? 1f : -1f;
+        UpdateFacing(initialDir);
     }
 
-    void InitPosition()
+    private void Update()
     {
-        int centerX = GridManager.Instance.width / 2;
-
-        // [수정 전] int bottomY = GridManager.Instance.height - 1; (맨 위)
-        // [수정 후] 0이 맨 아래(플레이어 진영)입니다.
-        int bottomY = 0;
-
-        currentPos = new Vector2Int(centerX, bottomY);
-        transform.position = GridManager.Instance.GetWorldPosition(currentPos, GridManager.Instance.unitHeight);
+        if (isMoving) return;
+        HandleInput();
     }
+
+    private void HandleInput()
+    {
+        float h = Input.GetAxisRaw("Horizontal");
+        float v = Input.GetAxisRaw("Vertical");
+
+        // 대각선 이동 방지
+        if (h != 0) bufferedMoveInput = new Vector3(h, 0, 0);
+        else if (v != 0) bufferedMoveInput = new Vector3(0, v, 0);
+        else bufferedMoveInput = null;
+
+        // 즉시 반응 (TurnManager가 구현되면 ResolveBufferedAction으로 제어권 이양 가능)
+        if (bufferedMoveInput.HasValue)
+        {
+            AttemptMove(bufferedMoveInput.Value);
+            bufferedMoveInput = null;
+        }
+    }
+
+    // --- 외부 호출 메서드 (오류 방지 및 로직 연동) ---
 
     public void OnTurnStart()
     {
-        if (isDead) return;
-        selectedAction = PlayerAction.None;
-        ClearIndicators();
-
-        // 턴 시작 시 방어 자세 등 초기화
-        if (animator)
-        {
-            animator.SetBool("IsGuarding", false);
-            animator.SetBool("IsAiming", false);
-        }
-    }
-
-    void Update()
-    {
-        if (isDead || TurnManager.Instance.currentState != TurnState.PlayerTurn) return;
-        if (isMovingVisual) return;
-
-        // 이동 (A/D)
-        if (Input.GetKeyDown(KeyCode.A)) TryMove(Vector2Int.left);
-        if (Input.GetKeyDown(KeyCode.D)) TryMove(Vector2Int.right);
-
-        // 행동 선택 (W: 공격준비, S: 방어준비)
-        if (Input.GetKeyDown(KeyCode.W)) SelectAction(PlayerAction.Attack);
-        if (Input.GetKeyDown(KeyCode.S)) SelectAction(PlayerAction.Defend);
-
-        // 행동 확정 (Space)
-        if (Input.GetKeyDown(KeyCode.Space) && selectedAction != PlayerAction.None) FinishTurn();
-    }
-
-    void TryMove(Vector2Int dir)
-    {
-        Vector2Int next = currentPos + dir;
-        bool isBottomRow = (next.y == GridManager.Instance.height - 1);
-
-        if (GridManager.Instance.IsWalkable(next) && isBottomRow)
-        {
-            currentPos = next;
-
-            // [애니메이션] 이동 시 준비 자세들 모두 해제
-            if (animator)
-            {
-                animator.SetBool("IsAiming", false);
-                animator.SetBool("IsGuarding", false);
-                animator.SetTrigger("Move");
-            }
-
-            // [시각적] 부드러운 이동 실행
-            StartCoroutine(MoveVisual(GridManager.Instance.GetWorldPosition(currentPos, GridManager.Instance.unitHeight)));
-
-            selectedAction = PlayerAction.None;
-            FinishTurn();
-        }
-    }
-
-    IEnumerator MoveVisual(Vector3 targetPos)
-    {
-        isMovingVisual = true;
-        while (Vector3.Distance(transform.position, targetPos) > 0.05f)
-        {
-            transform.position = Vector3.MoveTowards(transform.position, targetPos, moveSpeed * Time.deltaTime);
-            yield return null;
-        }
-        transform.position = targetPos;
-        isMovingVisual = false;
-    }
-
-    void SelectAction(PlayerAction a)
-    {
-        ClearIndicators();
-        selectedAction = a;
-
-        // [애니메이션] 준비 단계 (State 유지)
-        if (animator)
-        {
-            // 일단 다 끄고
-            animator.SetBool("IsAiming", false);
-            animator.SetBool("IsGuarding", false);
-
-            // 선택된 것만 킴
-            if (a == PlayerAction.Attack) animator.SetBool("IsAiming", true);
-            else if (a == PlayerAction.Defend) animator.SetBool("IsGuarding", true);
-        }
-
-        if (a == PlayerAction.Attack) ShowAttackRange();
-        else if (a == PlayerAction.Defend) ShowDefenseVisual();
+        isMoving = false;
     }
 
     public void ResolveBufferedAction()
     {
-        if (selectedAction == PlayerAction.Attack) PerformAttack();
-
-        ClearIndicators();
-        // 참고: 방어(IsGuarding)나 조준(IsAiming) 해제 시점은 PerformAttack 혹은 OnTurnStart에서 처리
+        if (bufferedMoveInput.HasValue)
+        {
+            AttemptMove(bufferedMoveInput.Value);
+            bufferedMoveInput = null;
+        }
     }
 
-    void PerformAttack()
+    public void TakeDamage(int damage)
     {
-        Debug.Log($"<color=cyan>[플레이어 공격 발동]</color>");
+        currentHealth -= damage;
+        Debug.Log($"플레이어 피격! 남은 체력: {currentHealth}");
 
-        // [애니메이션] 실행 단계
-        if (animator)
-        {
-            animator.SetBool("IsAiming", false); // 조준 끝
-            animator.SetTrigger("Attack");       // 공격!
-        }
+        // 피격도 Trigger로 가정 (만약 Hit 트리거가 없다면 이 줄은 주석 처리)
+        if (animator) animator.SetTrigger("Hit");
 
-        Vector2Int attackDir = new Vector2Int(0, -1); // 위쪽으로 공격
-
-        for (int y = currentPos.y - 1; y >= 0; y--)
-        {
-            Vector2Int tPos = new Vector2Int(currentPos.x, y);
-            var tile = GridManager.Instance.GetTile(tPos);
-            if (tile == null) continue;
-
-            if (tile.HasObstacle)
-            {
-                Debug.Log($"<color=orange>HIT OBSTACLE!</color> {tile.Obstacle.name}");
-                tile.Obstacle.OnHit(attackPower, attackDir); // 밀치기 방향 전달
-                return;
-            }
-            if (tile.HasUnit)
-            {
-                Debug.Log($"<color=red>HIT ENEMY!</color> {tile.OccupyingUnit.data.enemyName}");
-                tile.OccupyingUnit.TakeDamage(attackPower);
-                return;
-            }
-        }
+        if (currentHealth <= 0) Die();
     }
 
-    public void TakeDamage(int dmg)
+    private void Die()
     {
-        int finalDmg = dmg;
-        bool isBlocked = false; // 방어 성공 여부 체크
-
-        if (selectedAction == PlayerAction.Defend)
-        {
-            finalDmg = Mathf.RoundToInt(dmg * 0.5f);
-            isBlocked = true; // 방어 성공!
-            Debug.Log("<color=blue>[방어]</color> 대미지 경감!");
-        }
-
-        currentHp -= finalDmg;
-
-        // [수정] 방어 여부에 따라 다른 애니메이션 재생
-        if (animator)
-        {
-            if (isBlocked)
-            {
-                // 가드 성공 모션 (팅겨내기)
-                animator.SetTrigger("Block");
-            }
-            else
-            {
-                // 일반 피격 모션 (아파하기)
-                animator.SetTrigger("Hit");
-            }
-        }
-
-        if (currentHp <= 0)
-        {
-            isDead = true;
-            if (animator) animator.SetBool("IsDead", true);
-            Debug.Log("<color=red>GAME OVER</color>");
-        }
+        Debug.Log("플레이어 사망");
+        // 게임 오버 처리 로직
     }
 
-    void ShowDefenseVisual()
+    // --- 이동 핵심 로직 ---
+
+    private void AttemptMove(Vector3 direction)
     {
-        if (defenseIndicatorPrefab)
-            activeIndicators.Add(Instantiate(defenseIndicatorPrefab, GridManager.Instance.GetWorldPosition(currentPos, GridManager.Instance.indicatorHeight), Quaternion.identity));
-    }
+        UpdateFacing(direction.x);
 
-    void ShowAttackRange()
-    {
-        for (int y = currentPos.y - 1; y >= 0; y--)
+        Vector3 targetPos = transform.position + (direction * gridSize);
+
+        if (IsWalkable(targetPos))
         {
-            Vector2Int tPos = new Vector2Int(currentPos.x, y);
-            var tile = GridManager.Instance.GetTile(tPos);
-
-            if (tile != null)
-            {
-                activeIndicators.Add(Instantiate(attackIndicatorPrefab, GridManager.Instance.GetWorldPosition(tPos, GridManager.Instance.indicatorHeight), Quaternion.identity));
-                if (tile.HasObstacle) break;
-            }
+            StartCoroutine(MoveRoutine(targetPos));
         }
     }
 
-    void FinishTurn() { TurnManager.Instance.OnPlayerActionCompleted(); }
-    void ClearIndicators() { foreach (var g in activeIndicators) Destroy(g); activeIndicators.Clear(); }
+    private IEnumerator MoveRoutine(Vector3 targetPos)
+    {
+        isMoving = true;
+
+        // [수정 완료] IsMoving(Bool) 대신 Move(Trigger) 사용
+        if (animator != null)
+        {
+            animator.SetTrigger("Move");
+        }
+
+        float elapsedTime = 0f;
+        Vector3 startPos = transform.position;
+
+        while (elapsedTime < moveDuration)
+        {
+            transform.position = Vector3.Lerp(startPos, targetPos, elapsedTime / moveDuration);
+            elapsedTime += Time.deltaTime;
+            yield return null;
+        }
+
+        transform.position = targetPos; // 위치 정확하게 보정
+        isMoving = false;
+    }
+
+    // 방향 전환 (스프라이트 반전)
+    private void UpdateFacing(float xDir)
+    {
+        if (spriteRenderer == null || xDir == 0) return;
+
+        bool lookRight = xDir > 0;
+
+        // 원본 이미지 방향에 따라 flipX 설정
+        if (spriteOriginalFaceLeft)
+        {
+            spriteRenderer.flipX = lookRight;
+        }
+        else
+        {
+            spriteRenderer.flipX = !lookRight;
+        }
+    }
+
+    private bool IsWalkable(Vector3 targetPos)
+    {
+        // 장애물 레이어 감지
+        return !Physics2D.OverlapCircle(targetPos, 0.2f, obstacleLayer);
+    }
 }
