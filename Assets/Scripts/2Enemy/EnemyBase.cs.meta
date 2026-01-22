@@ -3,7 +3,10 @@ guid: df59050cfe86d7545b3540b9b45d2139
 MonoImporter:
   externalObjects: {}
   serializedVersion: 2
-  defaultReferences: []
+  defaultReferences:
+  - data: {instanceID: 0}
+  - attackIndicatorPrefab: {instanceID: 0}
+  - moveIndicatorPrefab: {instanceID: 0}
   executionOrder: 0
   icon: {instanceID: 0}
   userData: 

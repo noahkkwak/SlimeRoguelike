@@ -1,7 +1,9 @@
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
+
+// 플레이어 행동 타입 정의
+public enum PlayerActionType { Move, Attack, Wait }
 
 public class TurnManager : MonoBehaviour
 {
@@ -10,58 +12,160 @@ public class TurnManager : MonoBehaviour
     public TurnState currentState = TurnState.PlayerTurn;
     public List<EnemyBase> activeEnemies = new List<EnemyBase>();
 
-    void Awake() => Instance = this;
+    private void Awake() => Instance = this;
 
-    void Start()
+    private void Start()
     {
         SpawnEnemies();
-        StartCoroutine(StartGameRoutine());
+        StartPlayerTurn(); // 게임 시작 시 플레이어 턴으로 시작
     }
 
-    IEnumerator StartGameRoutine()
+    // =========================================================
+    // [1. 턴 시작 및 입력 처리]
+    // =========================================================
+
+    // 플레이어의 입력을 받으면 바로 턴 실행 시퀀스로 진입
+    public void ProcessTurn(PlayerActionType playerAction, Vector3 direction)
     {
-        yield return null;
+        if (currentState != TurnState.PlayerTurn) return;
+
+        StartCoroutine(ExecuteTurnSequence(playerAction, direction));
+    }
+
+    // =========================================================
+    // [2. 턴 실행 시퀀스 (이동 -> 공격)]
+    // =========================================================
+
+    private IEnumerator ExecuteTurnSequence(PlayerActionType playerAction, Vector3 playerMoveDir)
+    {
+        currentState = TurnState.EnemyTurn; // 입력 차단
+        PlayerController player = FindObjectOfType<PlayerController>();
+
+        // -----------------------------------------------------
+        // [Phase 1: 이동] 플레이어와 적의 이동을 동시에 처리
+        // -----------------------------------------------------
+        List<Coroutine> moveCoroutines = new List<Coroutine>();
+
+        // A. 플레이어 이동 (이동 명령인 경우)
+        if (playerAction == PlayerActionType.Move && player != null)
+        {
+            moveCoroutines.Add(StartCoroutine(player.ExecuteMove(playerMoveDir)));
+        }
+
+        // B. 적 이동
+        foreach (var enemy in activeEnemies)
+        {
+            if (enemy == null) continue;
+
+            // 적의 의도 계산 (이동할지 공격할지 결정)
+            enemy.CalculateIntent();
+
+            // 이동 전용 루틴 실행
+            var routine = enemy.ExecuteMoveRoutine();
+            if (routine != null) moveCoroutines.Add(StartCoroutine(routine));
+        }
+
+        // 모든 이동이 끝날 때까지 대기 (가장 긴 이동 시간 기준)
+        foreach (var c in moveCoroutines) yield return c;
+
+        // 이동 후 잠시 대기 (연출)
+        yield return new WaitForSeconds(0.1f);
+
+
+        // -----------------------------------------------------
+        // [Phase 2: 공격] 플레이어와 적의 공격을 처리
+        // -----------------------------------------------------
+        List<Coroutine> attackCoroutines = new List<Coroutine>();
+
+        // A. 플레이어 공격 (공격 명령인 경우)
+        if (playerAction == PlayerActionType.Attack && player != null)
+        {
+            attackCoroutines.Add(StartCoroutine(player.ExecuteAttack()));
+        }
+
+        // B. 적 공격
+        foreach (var enemy in activeEnemies)
+        {
+            if (enemy != null)
+            {
+                var routine = enemy.ExecuteAttackRoutine();
+                if (routine != null) attackCoroutines.Add(StartCoroutine(routine));
+            }
+        }
+
+        // 모든 공격 애니메이션 대기
+        foreach (var c in attackCoroutines) yield return c;
+
+        yield return new WaitForSeconds(0.2f); // 턴 종료 딜레이
+
+        // -----------------------------------------------------
+        // [3. 턴 종료 및 다음 턴 준비]
+        // -----------------------------------------------------
+        EndTurnAndPrepareNext();
+    }
+
+    private void EndTurnAndPrepareNext()
+    {
+        // null인 적(사망한 적) 리스트에서 정리
+        activeEnemies.RemoveAll(e => e == null);
+
+        // 다음 턴 적 의도 미리 계산 (플레이어에게 예고 표시용)
+        foreach (var enemy in activeEnemies)
+        {
+            if (enemy != null) enemy.CalculateIntent();
+        }
+
         StartPlayerTurn();
     }
 
+    public void StartPlayerTurn()
+    {
+        currentState = TurnState.PlayerTurn;
+        Debug.Log("--- Player Turn Start ---");
+    }
+
+    // =========================================================
+    // [유틸리티 및 오류 복구 함수]
+    // =========================================================
+
+    // [복구됨] EnemyBase에서 호출하는 함수
+    public void OnEnemyDead(EnemyBase enemy)
+    {
+        if (activeEnemies.Contains(enemy))
+        {
+            activeEnemies.Remove(enemy);
+        }
+    }
+
+    // [복구됨] 적 스폰 로직 (기존 로직 유지)
     void SpawnEnemies()
     {
         activeEnemies.Clear();
-        // StageManager 연동 부분은 잠시 주석 처리 혹은 유지 (상황에 맞게)
-        // if (StageManager.Instance == null) return; 
 
-        // 테스트용 랜덤 스폰 로직
-        int spawnCount = Random.Range(1, 3);
-
-        // [수정] 적이 생성될 Y 좌표는 맨 위(Height - 1)
-        int spawnY = GridManager.Instance.height - 1;
-
-        // X 좌표는 예고 구역(width-1)을 제외한 범위에서 랜덤 (0 ~ width-2)
-        // GridManager.width가 7이면, 인덱스는 0~6. 예고구역은 6. 플레이 가능한 X는 0~5.
-        List<int> availableX = new List<int>();
-        for (int x = 0; x < GridManager.Instance.width - 1; x++)
+        if (StageManager.Instance != null)
         {
-            availableX.Add(x);
-        }
+            // 테스트용: 하단(SpawnY)에 적 생성
+            int spawnY = GridManager.Instance.height - 1;
+            int spawnCount = Random.Range(1, 3);
 
-        for (int i = 0; i < spawnCount; i++)
-        {
-            if (availableX.Count == 0) break;
-            int randIndex = Random.Range(0, availableX.Count);
-            int xPos = availableX[randIndex];
-            availableX.RemoveAt(randIndex);
+            List<int> availableX = new List<int>();
+            for (int x = 0; x < GridManager.Instance.width - 1; x++) availableX.Add(x);
 
-            // [임시] 프리팹이 없다면 에러 방지용 리스트나 Resources 로드 사용
-            // 여기서는 기존 로직 유지하되 Y좌표만 spawnY로 변경
-            if (StageManager.Instance != null)
+            for (int i = 0; i < spawnCount; i++)
             {
+                if (availableX.Count == 0) break;
+                int randIndex = Random.Range(0, availableX.Count);
+                int xPos = availableX[randIndex];
+                availableX.RemoveAt(randIndex);
+
                 GameObject enemyPrefab = StageManager.Instance.GetRandomEnemyPrefab();
                 if (enemyPrefab != null)
                 {
                     GameObject go = Instantiate(enemyPrefab);
                     EnemyBase enemy = go.GetComponent<EnemyBase>();
 
-                    // [핵심 수정] (xPos, 0) -> (xPos, spawnY)
+                    // Z축 기반 좌표계라면 (x, spawnY)를 적절히 변환하여 배치 필요
+                    // EnemyBase.Initialize 내부 구현에 따름
                     enemy.Initialize(new Vector2Int(xPos, spawnY));
                     activeEnemies.Add(enemy);
                 }
@@ -69,73 +173,6 @@ public class TurnManager : MonoBehaviour
         }
     }
 
-    public void StartPlayerTurn()
-    {
-        currentState = TurnState.PlayerTurn;
-
-        if (ObstacleManager.Instance != null)
-        {
-            ObstacleManager.Instance.OnTurnStart();
-        }
-
-        GridManager.Instance.ClearReservations();
-
-        // 1. 적 선점
-        foreach (var enemy in activeEnemies)
-        {
-            if (enemy != null) GridManager.Instance.TryReserveTile(enemy.currentPos);
-        }
-
-        // 2. 의도 계산
-        foreach (var enemy in activeEnemies)
-        {
-            if (enemy != null) enemy.CalculateIntent();
-        }
-
-        var player = FindObjectOfType<PlayerController>();
-        if (player) player.OnTurnStart();
-
-        Debug.Log("<color=green>--- Player Turn Start ---</color>");
-    }
-
-    public void OnPlayerActionCompleted()
-    {
-        if (currentState == TurnState.PlayerTurn)
-            StartCoroutine(ExecuteTurnPhase());
-    }
-
-    // [핵심 변경] 턴 실행 순서 재구성
-    IEnumerator ExecuteTurnPhase()
-    {
-        currentState = TurnState.EnemyTurn;
-
-        // 1. 적들이 먼저 이동함 (플레이어는 구경 중)
-        foreach (var enemy in activeEnemies) if (enemy != null) enemy.ExecuteMove();
-        yield return new WaitForSeconds(0.3f);
-
-        // 2. 적이 이동을 마친 후, 플레이어의 예약된 액션(공격) 발동!
-        // (이때 적이 내 사거리 안으로 들어왔다면 피격됨)
-        var player = FindObjectOfType<PlayerController>();
-        if (player != null)
-        {
-            player.ResolveBufferedAction();
-        }
-        yield return new WaitForSeconds(0.2f); // 타격감 연출 시간
-
-        // 3. 살아남은 적들이 플레이어를 공격
-        foreach (var enemy in activeEnemies) if (enemy != null) enemy.ExecuteAttack();
-        yield return new WaitForSeconds(0.4f);
-
-        StartPlayerTurn();
-    }
-
-    public void OnEnemyDead(EnemyBase enemy)
-    {
-        if (activeEnemies.Contains(enemy)) activeEnemies.Remove(enemy);
-    }
-
-    public EnemyBase GetEnemyAt(Vector2Int p)
-    {
-        return activeEnemies.Find(e => e.currentPos == p);
-    }
+    // PlayerController에서 호출하는 완료 신호 (현재 구조에선 ExecuteTurnSequence가 제어하므로 비워둠)
+    public void OnPlayerActionCompleted() { }
 }
