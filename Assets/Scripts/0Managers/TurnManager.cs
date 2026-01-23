@@ -2,7 +2,7 @@ using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using SlimeRoguelike; // GlobalEnums
+// using SlimeRoguelike; <-- 삭제됨
 
 public class TurnManager : MonoBehaviour
 {
@@ -60,13 +60,12 @@ public class TurnManager : MonoBehaviour
 
         GridManager.Instance.ClearReservations();
 
-        // 적들의 행동 예고(Intent) 계산
         foreach (var enemy in activeEnemies)
         {
             if (enemy != null)
             {
                 enemy.CalculateIntent();
-                GridManager.Instance.TryReserveTile(enemy.currentPos); // 현재 위치 점유
+                GridManager.Instance.TryReserveTile(enemy.currentPos);
             }
         }
 
@@ -82,12 +81,11 @@ public class TurnManager : MonoBehaviour
             StartCoroutine(ExecuteTurnPhase());
     }
 
-    // [턴 실행 시퀀스]
     IEnumerator ExecuteTurnPhase()
     {
         currentState = TurnState.EnemyTurn;
 
-        // 1. 적 이동 (Player는 대기)
+        // 1. 적 이동
         foreach (var enemy in activeEnemies) if (enemy != null) enemy.ExecuteMove();
         yield return new WaitForSeconds(0.3f);
 
@@ -95,7 +93,7 @@ public class TurnManager : MonoBehaviour
         currentState = TurnState.EnvironmentAct;
         yield return StartCoroutine(GridManager.Instance.ScrollCentralRows());
 
-        // 3. 플레이어 공격 판정 (이동 후 위치 기준)
+        // 3. 플레이어 공격 판정
         var player = FindObjectOfType<PlayerController>();
         if (player != null)
         {
@@ -108,7 +106,6 @@ public class TurnManager : MonoBehaviour
         foreach (var enemy in activeEnemies) if (enemy != null) enemy.ExecuteAttack();
         yield return new WaitForSeconds(0.4f);
 
-        // 턴 종료 -> 다시 플레이어 턴
         StartPlayerTurn();
     }
 

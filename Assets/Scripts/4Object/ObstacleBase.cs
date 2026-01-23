@@ -11,11 +11,9 @@ public class ObstacleBase : MonoBehaviour
     public bool isWalkable = false; // 이동 가능 여부
     public bool isDestructible = true; // 파괴 가능 여부
 
-    // 에디터에서 배치 후 시작할 때 그리드에 등록
     void Start()
     {
         // 씬에 미리 배치된 오브젝트라면 게임 시작 시 등록 시도
-        // (TurnManager나 StageManager에서 일괄 처리한다면 이 부분은 없어도 됨)
         if (GridManager.Instance != null)
         {
             // 위치 보정 등은 생략하고 등록만 시도할 수도 있음
@@ -38,20 +36,14 @@ public class ObstacleBase : MonoBehaviour
 
     public void OnHit(int damage, Vector2Int dir)
     {
-        // 피격 로직 (밀치기 or 파괴)
         Debug.Log($"Obstacle Hit! Dmg: {damage}");
 
         if (type == ObstacleType.Destructible || isDestructible)
         {
-            // 파괴 로직
             if (GridManager.Instance != null)
                 GridManager.Instance.RemoveObstacle(gridPosition);
 
             Destroy(gameObject);
-        }
-        else if (type == ObstacleType.Volatile)
-        {
-            // 폭발 로직 등...
         }
     }
 }

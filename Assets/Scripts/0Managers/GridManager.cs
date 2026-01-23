@@ -1,7 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using SlimeRoguelike; // GlobalEnums
+// using SlimeRoguelike; <-- 이 줄을 지운 버전이야
 
 public class GridManager : MonoBehaviour
 {
@@ -85,34 +85,29 @@ public class GridManager : MonoBehaviour
     public void RemoveObstacle(Vector2Int pos) { var t = GetTile(pos); if (t != null) t.Obstacle = null; }
     public void RegisterUnit(Vector2Int pos, EnemyBase unit) { var t = GetTile(pos); if (t != null) t.OccupyingUnit = unit; }
     public void RemoveUnit(Vector2Int pos) { var t = GetTile(pos); if (t != null) t.OccupyingUnit = null; }
-    // 필요 시 Zone, Item 등록 함수 추가
 
     // ==================================================================================
     // [전장 이동 시스템] 중앙 행(Row)들이 플레이어 쪽(아래)으로 이동
     // ==================================================================================
     public IEnumerator ScrollCentralRows()
     {
-        // 맨 윗줄(0)과 맨 아랫줄(height-1)을 제외한 중앙 영역만 이동 (1 ~ height-2)
         int startY = 1;
         int endY = height - 2;
 
-        // 데이터 덮어쓰기 방지를 위해 '아래쪽 행'부터 처리 (Bottom-up)
         for (int y = endY; y >= startY; y--)
         {
             for (int x = 0; x < width; x++)
             {
                 Vector2Int currentPos = new Vector2Int(x, y);
-                Vector2Int nextPos = new Vector2Int(x, y + 1); // 아래로 한 칸
+                Vector2Int nextPos = new Vector2Int(x, y + 1);
 
                 MoveTileContent(currentPos, nextPos);
             }
         }
 
-        // 시각적 이동 대기
         yield return new WaitForSeconds(scrollSpeed);
     }
 
-    // 타일의 내용물(유닛, 장애물)을 논리적/시각적으로 이동
     void MoveTileContent(Vector2Int from, Vector2Int to)
     {
         TileNode fromNode = GetTile(from);
@@ -123,17 +118,9 @@ public class GridManager : MonoBehaviour
         // A. 유닛 이동
         if (fromNode.OccupyingUnit != null)
         {
-            // 만약 목적지에 이미 무언가 있다면 충돌 처리 (지금은 단순 덮어쓰기/겹침 허용)
-            // 추후 '밀려난 곳에 장애물이 있으면 유닛 사망' 로직 추가 가능
-
-            // 데이터 이동
             toNode.OccupyingUnit = fromNode.OccupyingUnit;
             fromNode.OccupyingUnit = null;
-
-            // 유닛 내부 좌표 갱신
             toNode.OccupyingUnit.currentPos = to;
-
-            // 시각적 이동 (부드럽게)
             StartCoroutine(SmoothMove(toNode.OccupyingUnit.transform, GetWorldPosition(to, unitHeight)));
         }
 
@@ -142,15 +129,17 @@ public class GridManager : MonoBehaviour
         {
             toNode.Obstacle = fromNode.Obstacle;
             fromNode.Obstacle = null;
-
-            // 장애물 내부 좌표 갱신 (만약 ObstacleBase에 좌표 변수가 있다면 여기서 갱신해줘야 함)
-            if (toNode.Obstacle != null) toNode.Obstacle.gridPosition = to; // *ObstacleBase에 gridPosition이 있다고 가정
-
-            // 시각적 이동
+            if (toNode.Obstacle != null) toNode.Obstacle.gridPosition = to;
             StartCoroutine(SmoothMove(toNode.Obstacle.transform, GetWorldPosition(to, unitHeight)));
         }
 
-        // C. 아이템 이동 (동일 로직 적용 가능)
+        // C. 아이템 이동
+        if (fromNode.Item != null)
+        {
+            toNode.Item = fromNode.Item;
+            fromNode.Item = null;
+            StartCoroutine(SmoothMove(toNode.Item.transform, GetWorldPosition(to, 0.1f)));
+        }
     }
 
     IEnumerator SmoothMove(Transform target, Vector3 endPos)
