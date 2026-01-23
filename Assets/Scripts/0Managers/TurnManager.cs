@@ -2,6 +2,7 @@ using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using SlimeRoguelike; // GlobalEnums
 
 public class TurnManager : MonoBehaviour
 {
@@ -55,22 +56,18 @@ public class TurnManager : MonoBehaviour
         currentState = TurnState.PlayerTurn;
 
         if (ObstacleManager.Instance != null)
-        {
             ObstacleManager.Instance.OnTurnStart();
-        }
 
         GridManager.Instance.ClearReservations();
 
-        // 1. 적 선점
+        // 적들의 행동 예고(Intent) 계산
         foreach (var enemy in activeEnemies)
         {
-            if (enemy != null) GridManager.Instance.TryReserveTile(enemy.currentPos);
-        }
-
-        // 2. 의도 계산
-        foreach (var enemy in activeEnemies)
-        {
-            if (enemy != null) enemy.CalculateIntent();
+            if (enemy != null)
+            {
+                enemy.CalculateIntent();
+                GridManager.Instance.TryReserveTile(enemy.currentPos); // 현재 위치 점유
+            }
         }
 
         var player = FindObjectOfType<PlayerController>();
@@ -85,28 +82,33 @@ public class TurnManager : MonoBehaviour
             StartCoroutine(ExecuteTurnPhase());
     }
 
-    // [핵심 변경] 턴 실행 순서 재구성
+    // [턴 실행 시퀀스]
     IEnumerator ExecuteTurnPhase()
     {
         currentState = TurnState.EnemyTurn;
 
-        // 1. 적들이 먼저 이동함 (플레이어는 구경 중)
+        // 1. 적 이동 (Player는 대기)
         foreach (var enemy in activeEnemies) if (enemy != null) enemy.ExecuteMove();
         yield return new WaitForSeconds(0.3f);
 
-        // 2. 적이 이동을 마친 후, 플레이어의 예약된 액션(공격) 발동!
-        // (이때 적이 내 사거리 안으로 들어왔다면 피격됨)
+        // 2. 환경(전장) 이동
+        currentState = TurnState.EnvironmentAct;
+        yield return StartCoroutine(GridManager.Instance.ScrollCentralRows());
+
+        // 3. 플레이어 공격 판정 (이동 후 위치 기준)
         var player = FindObjectOfType<PlayerController>();
         if (player != null)
         {
             player.ResolveBufferedAction();
         }
-        yield return new WaitForSeconds(0.2f); // 타격감 연출 시간
+        yield return new WaitForSeconds(0.2f);
 
-        // 3. 살아남은 적들이 플레이어를 공격
+        // 4. 적 공격 실행
+        currentState = TurnState.EnemyAct;
         foreach (var enemy in activeEnemies) if (enemy != null) enemy.ExecuteAttack();
         yield return new WaitForSeconds(0.4f);
 
+        // 턴 종료 -> 다시 플레이어 턴
         StartPlayerTurn();
     }
 

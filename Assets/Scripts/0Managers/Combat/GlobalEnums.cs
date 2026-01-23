@@ -1,44 +1,44 @@
-// Assets/Scripts/0Managers/Combat/GlobalEnums.cs
+using UnityEngine;
 
-public enum TurnState { PlayerTurn, EnemyTurn, GameOver }
-public enum IntentType { None, Wait, Move, Attack }
-public enum EnemyState { Idle, Ready, Stunned, Dead }
-public enum PlayerAction { None, Attack, Defend }
-public enum AttackType { Direct, Arcing }
-public enum StatusType { None, Stun }
-public enum MovePattern { Chase, MaintainDist, Flee }
-
-// [신규] 장애물 유형
-public enum ObstacleType
+namespace SlimeRoguelike
 {
-    Indestructible,
-    Destructible,
-    Explosive       // [이게 밀리는 장애물로 사용됩니다]
-}
+    // 턴의 진행 상태
+    public enum TurnState
+    {
+        PlayerInput,    // 플레이어 입력 대기
+        PlayerAct,      // 플레이어 행동 실행 중
+        EnvironmentAct, // [신규] 전장(타일) 이동 및 환경 기믹 처리
+        EnemyAct,       // 적 행동 실행 중
+        Processing      // 기타 연산 중
+    }
 
-// [신규] 충돌 시 발생할 효과 타입
-public enum CollisionEffect
-{
-    None,
-    DamageOnly,     // 피해만
-    StunOnly,       // 기절만
-    Both            // 피해 + 기절
-}
+    // 유닛 상태
+    public enum UnitState
+    {
+        Idle, Move, Aiming, Attack, Guard, Block, Charging, Hit, Stunned, Die
+    }
 
-// [신규] 영역(Zone) 유형
-public enum ZoneType
-{
-    None,
-    Fire,   // 턴 시작 시 대미지
-    Poison, // 중독 상태 부여
-    Ice     // 이동 불가 등
-}
+    // 타일 종류
+    public enum TileType
+    {
+        Ground, Obstacle, Zone, Empty
+    }
 
-// [신규] 아이템 유형
-public enum ItemType
-{
-    None,
-    Consumable, // 체력 회복 등
-    Currency,   // 골드
-    SkillItem   // 스킬 해금
+    // 공격 방식
+    public enum AttackType
+    {
+        Direct, Arcing
+    }
+
+    // 의도(Intent) 타입 (EnemyBase에서 사용)
+    public enum IntentType
+    {
+        None, Move, Attack, Wait, Buff, Debuff
+    }
+
+    // 상태이상 타입
+    public enum StatusType
+    {
+        Stun, Poison, Burn
+    }
 }

@@ -1,149 +1,46 @@
-using System.Collections.Generic;
 using UnityEngine;
 
-public class ObstacleManager : MonoBehaviour
+public class ObstacleBase : MonoBehaviour
 {
-    public static ObstacleManager Instance;
+    public Vector2Int gridPosition; // 현재 그리드 좌표
+    public bool isWalkable = false; // 이동 가능 여부 (일반적으론 false)
+    public bool isDestructible = false; // 파괴 가능 여부
 
-    [Header("Conveyor Settings")]
-    public int movePeriod = 2;
-    private int currentTurnCount = 0;
-
-    [Header("Spawn Settings (Obstacle)")]
-    public List<GameObject> obstaclePrefabs;
-    public int minRow = 1;
-    public int maxRow = 3;
-    [Range(0, 100)] public int obstacleSpawnChance = 40;
-
-    [Header("Spawn Settings (Zone)")]
-    public List<GameObject> zonePrefabs;
-    [Range(0, 100)] public int zoneSpawnChance = 30;
-
-    void Awake() => Instance = this;
-
-    public void OnTurnStart()
+    // 에디터에서 배치 후 시작할 때 그리드에 등록
+    void Start()
     {
-        currentTurnCount++;
-        if (currentTurnCount % movePeriod == 0)
+        // 1. 월드 좌표를 그리드 좌표로 변환 (간단히 반올림 처리 예시)
+        // 만약 GridManager에 WorldToGrid 함수가 있다면 그걸 쓰는 게 정확함.
+        // 여기서는 수동 할당 혹은 초기화 로직이 필요함.
+
+        // 예시: 외부(StageManager 등)에서 Init을 호출해준다면 이 Start는 비워둬도 됨.
+        // 하지만 씬에 미리 배치된 오브젝트라면 아래처럼 스스로 등록해야 함.
+        if (GridManager.Instance != null)
         {
-            MoveConveyorBelt();
-            SpawnNewColumn();
+            // 임시: 현재 위치를 기준으로 좌표 계산 (GridManager의 셀 크기 반영 필요)
+            // 정확한 구현을 위해선 GridManager에 WorldToCell 메서드를 추가하는 것이 좋음.
+            // 일단은 외부에서 Initialize를 호출한다고 가정하고 비워둠.
         }
     }
 
-    void MoveConveyorBelt()
+    public void Initialize(Vector2Int pos)
     {
-        // ... (이동 로직은 기존과 100% 동일, 생략 없이 그대로 유지) ...
-        Debug.Log("<color=orange>[Conveyor]</color> 전장이 이동합니다!");
+        this.gridPosition = pos;
+        transform.position = GridManager.Instance.GetWorldPosition(pos, GridManager.Instance.unitHeight);
 
-        List<ObstacleBase> movingObstacles = new List<ObstacleBase>();
-        List<ZoneBase> movingZones = new List<ZoneBase>();
-
-        for (int x = 0; x < GridManager.Instance.width; x++)
-        {
-            for (int y = minRow; y <= maxRow; y++)
-            {
-                var tile = GridManager.Instance.GetTile(new Vector2Int(x, y));
-                if (tile == null) continue;
-
-                if (tile.HasObstacle) movingObstacles.Add(tile.Obstacle);
-                if (tile.Zone != null) movingZones.Add(tile.Zone);
-            }
-        }
-
-        foreach (var obs in movingObstacles)
-        {
-            GridManager.Instance.RemoveObstacle(obs.currentPos);
-            Vector2Int nextPos = obs.currentPos + Vector2Int.left;
-
-            if (nextPos.x < 0) Destroy(obs.gameObject);
-            else
-            {
-                obs.currentPos = nextPos;
-                obs.transform.position = GridManager.Instance.GetWorldPosition(nextPos, GridManager.Instance.unitHeight);
-                GridManager.Instance.RegisterObstacle(nextPos, obs);
-            }
-        }
-
-        foreach (var zone in movingZones)
-        {
-            GridManager.Instance.RemoveZone(zone.currentPos);
-            Vector2Int nextPos = zone.currentPos + Vector2Int.left;
-
-            if (nextPos.x < 0) Destroy(zone.gameObject);
-            else
-            {
-                zone.currentPos = nextPos;
-                zone.transform.position = GridManager.Instance.GetWorldPosition(nextPos, 0.02f);
-                GridManager.Instance.RegisterZone(nextPos, zone);
-            }
-        }
+        // **중요: 그리드 매니저에게 나 여기 있다고 알림**
+        GridManager.Instance.RegisterObstacle(pos, this);
     }
 
-    void SpawnNewColumn()
+    public void OnHit(int damage, Vector2Int dir)
     {
-        int spawnX = GridManager.Instance.width - 1;
-        int spawnedCount = 0;
+        // 피격 로직 (밀치기 or 파괴)
+        Debug.Log($"Obstacle Hit! Dmg: {damage}");
 
-        for (int y = minRow; y <= maxRow; y++)
+        if (isDestructible)
         {
-            if (spawnedCount >= 2) break;
-
-            // [수정] 8방향 체크: 주변에 이미 2개 이상 있으면 생성 금지 (뭉침 방지)
-            if (CountObstaclesAround8(spawnX, y) >= 2) continue;
-
-            // [수정] 가로 연속 배치 방지: 바로 왼쪽에 장애물이 있으면 90% 확률로 생성 안 함
-            if (GridManager.Instance.IsObstacle(new Vector2Int(spawnX - 1, y)))
-            {
-                if (Random.Range(0, 100) < 90) continue;
-            }
-
-            if (Random.Range(0, 100) < obstacleSpawnChance)
-            {
-                if (obstaclePrefabs.Count > 0)
-                {
-                    SpawnObject(obstaclePrefabs, spawnX, y, true);
-                    spawnedCount++;
-                }
-            }
+            GridManager.Instance.RemoveObstacle(gridPosition);
+            Destroy(gameObject);
         }
-
-        // 영역 생성 (기존 유지)
-        for (int y = minRow; y <= maxRow; y++)
-        {
-            if (GridManager.Instance.IsObstacle(new Vector2Int(spawnX, y))) continue;
-
-            if (Random.Range(0, 100) < zoneSpawnChance)
-            {
-                if (zonePrefabs != null && zonePrefabs.Count > 0)
-                    SpawnObject(zonePrefabs, spawnX, y, false);
-            }
-        }
-    }
-
-    // [신규] 8방향 주변 장애물 개수 체크 (본인 제외)
-    int CountObstaclesAround8(int cx, int cy)
-    {
-        int count = 0;
-        for (int x = cx - 1; x <= cx + 1; x++)
-        {
-            for (int y = cy - 1; y <= cy + 1; y++)
-            {
-                if (x == cx && y == cy) continue; // 나 자신 제외
-                if (GridManager.Instance.IsObstacle(new Vector2Int(x, y))) count++;
-            }
-        }
-        return count;
-    }
-
-    void SpawnObject(List<GameObject> prefabs, int x, int y, bool isObstacle)
-    {
-        if (prefabs.Count == 0) return;
-        GameObject prefab = prefabs[Random.Range(0, prefabs.Count)];
-        GameObject go = Instantiate(prefab);
-        Vector2Int pos = new Vector2Int(x, y);
-
-        if (isObstacle) go.GetComponent<ObstacleBase>().Initialize(pos);
-        else go.GetComponent<ZoneBase>().Initialize(pos);
     }
 }
