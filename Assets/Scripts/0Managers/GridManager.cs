@@ -1,7 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-// using SlimeRoguelike; <-- 이 줄을 지운 버전이야
 
 public class GridManager : MonoBehaviour
 {

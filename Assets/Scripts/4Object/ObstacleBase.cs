@@ -16,7 +16,7 @@ public class ObstacleBase : MonoBehaviour
         // 씬에 미리 배치된 오브젝트라면 게임 시작 시 등록 시도
         if (GridManager.Instance != null)
         {
-            // 위치 보정 등은 생략하고 등록만 시도할 수도 있음
+            Initialize(gridPosition); // 필요 시 좌표 보정 로직 추가 가능
         }
     }
 
