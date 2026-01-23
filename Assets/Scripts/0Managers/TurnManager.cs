@@ -27,22 +27,10 @@ public class TurnManager : MonoBehaviour
     void SpawnEnemies()
     {
         activeEnemies.Clear();
-        // StageManager 연동 부분은 잠시 주석 처리 혹은 유지 (상황에 맞게)
-        // if (StageManager.Instance == null) return; 
+        if (StageManager.Instance == null) return;
 
-        // 테스트용 랜덤 스폰 로직
         int spawnCount = Random.Range(1, 3);
-
-        // [수정] 적이 생성될 Y 좌표는 맨 위(Height - 1)
-        int spawnY = GridManager.Instance.height - 1;
-
-        // X 좌표는 예고 구역(width-1)을 제외한 범위에서 랜덤 (0 ~ width-2)
-        // GridManager.width가 7이면, 인덱스는 0~6. 예고구역은 6. 플레이 가능한 X는 0~5.
-        List<int> availableX = new List<int>();
-        for (int x = 0; x < GridManager.Instance.width - 1; x++)
-        {
-            availableX.Add(x);
-        }
+        List<int> availableX = Enumerable.Range(0, GridManager.Instance.width).ToList();
 
         for (int i = 0; i < spawnCount; i++)
         {
@@ -51,20 +39,13 @@ public class TurnManager : MonoBehaviour
             int xPos = availableX[randIndex];
             availableX.RemoveAt(randIndex);
 
-            // [임시] 프리팹이 없다면 에러 방지용 리스트나 Resources 로드 사용
-            // 여기서는 기존 로직 유지하되 Y좌표만 spawnY로 변경
-            if (StageManager.Instance != null)
+            GameObject enemyPrefab = StageManager.Instance.GetRandomEnemyPrefab();
+            if (enemyPrefab != null)
             {
-                GameObject enemyPrefab = StageManager.Instance.GetRandomEnemyPrefab();
-                if (enemyPrefab != null)
-                {
-                    GameObject go = Instantiate(enemyPrefab);
-                    EnemyBase enemy = go.GetComponent<EnemyBase>();
-
-                    // [핵심 수정] (xPos, 0) -> (xPos, spawnY)
-                    enemy.Initialize(new Vector2Int(xPos, spawnY));
-                    activeEnemies.Add(enemy);
-                }
+                GameObject go = Instantiate(enemyPrefab);
+                EnemyBase enemy = go.GetComponent<EnemyBase>();
+                enemy.Initialize(new Vector2Int(xPos, 0));
+                activeEnemies.Add(enemy);
             }
         }
     }

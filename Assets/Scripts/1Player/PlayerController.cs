@@ -45,11 +45,7 @@ public class PlayerController : MonoBehaviour
     void InitPosition()
     {
         int centerX = GridManager.Instance.width / 2;
-
-        // [수정 전] int bottomY = GridManager.Instance.height - 1; (맨 위)
-        // [수정 후] 0이 맨 아래(플레이어 진영)입니다.
-        int bottomY = 0;
-
+        int bottomY = GridManager.Instance.height - 1;
         currentPos = new Vector2Int(centerX, bottomY);
         transform.position = GridManager.Instance.GetWorldPosition(currentPos, GridManager.Instance.unitHeight);
     }
