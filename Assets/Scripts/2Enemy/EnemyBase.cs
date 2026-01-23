@@ -55,34 +55,6 @@ public class EnemyBase : MonoBehaviour
         FaceDirection(defaultFacingDir);
     }
 
-    // [추가] 이동 전용 코루틴
-    public IEnumerator ExecuteMoveRoutine()
-    {
-        // 예: 의도가 이동일 경우에만 실행
-        if (currentIntent.type == IntentType.Move)
-        {
-            if (animator) animator.SetTrigger("Move");
-
-            // 실제 이동 로직 (Lerp 등)
-            // ... 코드 생략 (기존 Move 로직을 여기로 옮기되 yield return null 포함) ...
-
-            // 시뮬레이션용 시간 대기
-            yield return new WaitForSeconds(0.2f);
-        }
-    }
-
-    // [추가] 공격 전용 코루틴
-    public IEnumerator ExecuteAttackRoutine()
-    {
-        if (currentIntent.type == IntentType.Attack)
-        {
-            if (animator) animator.SetTrigger("Attack");
-            yield return new WaitForSeconds(0.4f); // 공격 모션 대기
-
-            // 데미지 판정 로직
-        }
-    }
-
     public void CalculateIntent()
     {
         ClearIndicators();

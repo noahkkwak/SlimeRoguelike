@@ -6,6 +6,7 @@ public class PlayerController : MonoBehaviour
     [Header("Movement Settings")]
     [SerializeField] private float moveDuration = 0.2f;
     [SerializeField] private float gridSize = 1f;
+    [SerializeField] private LayerMask obstacleLayer;
 
     [Header("Components")]
     [SerializeField] private SpriteRenderer spriteRenderer;
@@ -15,10 +16,12 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private int maxHealth = 3;
     private int currentHealth;
 
-    // 외부 참조용 좌표 (반올림하여 정확한 정수 좌표 반환)
-    public Vector2Int currentPos => new Vector2Int(Mathf.RoundToInt(transform.position.x), Mathf.RoundToInt(transform.position.z));
+    // [ObstacleBase, EnemyBase 연동용] 현재 그리드 좌표 반환
+    public Vector2Int currentPos => new Vector2Int(Mathf.RoundToInt(transform.position.x), Mathf.RoundToInt(transform.position.y));
 
+    // 상태 관리
     private bool isBusy = false;
+    private Vector3? bufferedInput = null; // 이동/공격 선입력 저장
 
     private void Awake()
     {
@@ -29,13 +32,15 @@ public class PlayerController : MonoBehaviour
 
     private void Start()
     {
-        // 시작 시 적 방향(화면 안쪽 혹은 설정된 방향) 바라보기
-        UpdateFacing(1);
+        // 초기 시선 처리 (화면 중앙 방향)
+        float initialDir = transform.position.x < 0 ? 1f : -1f;
+        UpdateFacing(initialDir);
     }
 
     private void Update()
     {
-        // 턴 매니저가 '플레이어 턴' 상태일 때만 입력 허용
+        // 행동 중(이동/공격)이거나 턴 매니저가 플레이어 턴이 아니라고 판단하면 조작 불가
+        // TurnManager.currentState 확인 추가
         if (isBusy || TurnManager.Instance.currentState != TurnState.PlayerTurn) return;
 
         HandleInput();
@@ -46,50 +51,77 @@ public class PlayerController : MonoBehaviour
         float h = Input.GetAxisRaw("Horizontal");
         float v = Input.GetAxisRaw("Vertical");
 
-        Vector3 moveDir = Vector3.zero;
+        // 1. 이동 입력
+        if (h != 0) bufferedInput = new Vector3(h, 0, 0);
+        else if (v != 0) bufferedInput = new Vector3(0, v, 0);
+        else if (Input.GetKeyDown(KeyCode.Space)) bufferedInput = Vector3.zero; // 공격 신호(Vector3.zero)로 임시 사용
+        else bufferedInput = null;
 
-        // [버그 수정] W/S 입력을 Y축(높이)이 아닌 Z축(깊이)으로 변경
-        if (h != 0) moveDir = new Vector3(h, 0, 0);
-        else if (v != 0) moveDir = new Vector3(0, 0, v);
-
-        if (moveDir != Vector3.zero)
+        if (bufferedInput.HasValue)
         {
-            // 이동하려는 좌표 계산
-            Vector2Int targetGridPos = currentPos + new Vector2Int((int)moveDir.x, (int)moveDir.z);
-
-            // [LayerMask 제거] GridManager에게 해당 타일이 비어있는지 물어봄
-            // 주의: GridManager에 IsWalkable 함수가 없다면 아래 3번 항목의 GridManager 수정 코드를 참고하세요.
-            TileNode targetTile = GridManager.Instance.GetTile(targetGridPos);
-
-            // 타일이 존재하고, 장애물이 없고, 유닛이 없으면 이동 가능
-            bool canMove = (targetTile != null && !targetTile.HasObstacle && !targetTile.HasUnit);
-
-            if (canMove)
+            if (bufferedInput.Value == Vector3.zero)
             {
-                // 턴 매니저에게 "이동 행동" 요청
-                TurnManager.Instance.ProcessTurn(PlayerActionType.Move, moveDir);
+                StartCoroutine(AttackRoutine());
             }
-        }
-        else if (Input.GetKeyDown(KeyCode.Space))
-        {
-            // 턴 매니저에게 "공격 행동" 요청
-            TurnManager.Instance.ProcessTurn(PlayerActionType.Attack, Vector3.zero);
+            else
+            {
+                AttemptMove(bufferedInput.Value);
+            }
+            bufferedInput = null;
         }
     }
 
-    // --- TurnManager가 호출하는 실제 행동 함수들 ---
+    // =========================================================
+    // [TurnManager 연동]
+    // =========================================================
 
-    public IEnumerator ExecuteMove(Vector3 direction)
+    public void OnTurnStart()
     {
-        isBusy = true;
+        isBusy = false;
+        bufferedInput = null;
+    }
+
+    // TurnManager의 ExecuteTurnPhase에서 호출됨 (예약된 액션이 있다면 실행)
+    public void ResolveBufferedAction()
+    {
+        // 현재 로직상 즉시 반응하므로 비워두거나,
+        // 추후 '턴 종료 후 예약된 공격 발동'을 구현할 때 사용
+    }
+
+    public void TakeDamage(int damage)
+    {
+        currentHealth -= damage;
+        Debug.Log($"[Player] 피격! 남은 체력: {currentHealth}");
+
+        if (animator) animator.SetTrigger("Hit");
+
+        if (currentHealth <= 0) Die();
+    }
+
+    // =========================================================
+    // [행동 로직]
+    // =========================================================
+
+    private void AttemptMove(Vector3 direction)
+    {
         UpdateFacing(direction.x);
 
+        Vector3 targetPos = transform.position + (direction * gridSize);
+
+        if (IsWalkable(targetPos))
+        {
+            StartCoroutine(MoveRoutine(targetPos));
+        }
+    }
+
+    private IEnumerator MoveRoutine(Vector3 targetPos)
+    {
+        isBusy = true;
         if (animator) animator.SetTrigger("Move");
 
-        Vector3 startPos = transform.position;
-        Vector3 targetPos = startPos + (direction * gridSize);
-
         float elapsedTime = 0f;
+        Vector3 startPos = transform.position;
+
         while (elapsedTime < moveDuration)
         {
             transform.position = Vector3.Lerp(startPos, targetPos, elapsedTime / moveDuration);
@@ -98,34 +130,57 @@ public class PlayerController : MonoBehaviour
         }
 
         transform.position = targetPos; // 위치 보정
-        isBusy = false;
+
+        // [핵심] 이동 완료 -> 턴 매니저에게 알림
+        NotifyTurnEnd();
     }
 
-    public IEnumerator ExecuteAttack()
+    private IEnumerator AttackRoutine()
     {
         isBusy = true;
         if (animator) animator.SetTrigger("Attack");
 
-        // 공격 애니메이션 타이밍 대기
-        yield return new WaitForSeconds(0.4f);
+        yield return new WaitForSeconds(0.4f); // 애니메이션 시간 대기
 
-        // TODO: 공격 범위 내의 적 타격 로직 추가
-
-        isBusy = false;
+        // [핵심] 공격 완료 -> 턴 매니저에게 알림
+        NotifyTurnEnd();
     }
+
+    private void NotifyTurnEnd()
+    {
+        Debug.Log("행동 종료. 턴을 넘깁니다.");
+
+        // [수정 완료] 공유해주신 TurnManager 코드에 있는 함수 호출
+        if (TurnManager.Instance != null)
+        {
+            TurnManager.Instance.OnPlayerActionCompleted();
+        }
+        else
+        {
+            Debug.LogError("TurnManager가 씬에 없습니다!");
+            isBusy = false; // 비상 탈출
+        }
+    }
+
+    // =========================================================
+    // [보조 기능]
+    // =========================================================
 
     private void UpdateFacing(float xDir)
     {
         if (spriteRenderer == null || xDir == 0) return;
-        // xDir > 0 (오른쪽) -> flipX = false
-        // xDir < 0 (왼쪽) -> flipX = true
-        spriteRenderer.flipX = (xDir < 0);
+        if (xDir > 0) spriteRenderer.flipX = false;
+        else if (xDir < 0) spriteRenderer.flipX = true;
     }
 
-    public void TakeDamage(int damage)
+    private bool IsWalkable(Vector3 targetPos)
     {
-        currentHealth -= damage;
-        if (animator) animator.SetTrigger("Hit");
-        if (currentHealth <= 0) Debug.Log("Player Died");
+        // 당장은 LayerMask를 사용해 프로토타입 구동 확인
+        return !Physics2D.OverlapCircle(targetPos, 0.2f, obstacleLayer);
+    }
+
+    private void Die()
+    {
+        Debug.Log("플레이어 사망");
     }
 }

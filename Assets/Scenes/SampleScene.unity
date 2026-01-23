@@ -234,7 +234,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!65 &824589535
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -407,7 +407,7 @@ Transform:
   m_GameObject: {fileID: 963194225}
   serializedVersion: 2
   m_LocalRotation: {x: 0.45315388, y: -0.36599815, z: 0.2113091, w: 0.78488564}
-  m_LocalPosition: {x: 12, y: 12, z: -4}
+  m_LocalPosition: {x: 8, y: 12, z: -8}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -559,10 +559,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   width: 7
   height: 5
-  tileSize: 2
+  cellSpacing: 2
   unitHeight: 0.2
   indicatorHeight: 0.1
-  tilePrefab: {fileID: 4115256258341824179, guid: a86fe2e460c74e14fa0aca74d2394a4d, type: 3}
 --- !u!114 &1716834972
 MonoBehaviour:
   m_ObjectHideFlags: 0
