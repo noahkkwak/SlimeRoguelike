@@ -1,22 +1,24 @@
 using UnityEngine;
 
-public class ObstacleBase : MonoBehaviour
+public class ObstacleObject : MonoBehaviour
 {
     [Header("Settings")]
     public ObstacleType type = ObstacleType.Destructible;
     public CollisionEffect collisionEffect = CollisionEffect.None;
 
     [Header("State")]
-    public Vector2Int gridPosition; // 현재 그리드 좌표
-    public bool isWalkable = false; // 이동 가능 여부
-    public bool isDestructible = true; // 파괴 가능 여부
+    public Vector2Int gridPosition;
+    public bool isWalkable = false; // 소문자 변수
+    public bool isDestructible = true;
+
+    // [중요] 외부에서 접근할 대문자 프로퍼티 추가 (CS1061 에러 해결)
+    public bool IsWalkable => isWalkable;
 
     void Start()
     {
-        // 씬에 미리 배치된 오브젝트라면 게임 시작 시 등록 시도
         if (GridManager.Instance != null)
         {
-            Initialize(gridPosition); // 필요 시 좌표 보정 로직 추가 가능
+            Initialize(gridPosition);
         }
     }
 
@@ -24,12 +26,9 @@ public class ObstacleBase : MonoBehaviour
     {
         this.gridPosition = pos;
 
-        // 위치를 그리드에 맞게 강제 조정
         if (GridManager.Instance != null)
         {
             transform.position = GridManager.Instance.GetWorldPosition(pos, GridManager.Instance.unitHeight);
-
-            // **중요: 그리드 매니저에게 나 여기 있다고 알림**
             GridManager.Instance.RegisterObstacle(pos, this);
         }
     }

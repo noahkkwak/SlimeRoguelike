@@ -12,9 +12,8 @@ public class GridManager : MonoBehaviour
     public float cellSpacing = 2.0f;
     public float unitHeight = 0.2f;
     public float indicatorHeight = 0.1f;
-    public float scrollSpeed = 0.3f; // 전장 이동 속도
+    public float scrollSpeed = 0.3f;
 
-    // 맵 데이터
     public Dictionary<Vector2Int, TileNode> Tiles = new Dictionary<Vector2Int, TileNode>();
     private HashSet<Vector2Int> reservedTiles = new HashSet<Vector2Int>();
 
@@ -42,7 +41,6 @@ public class GridManager : MonoBehaviour
         }
     }
 
-    // --- 조회 및 검사 ---
     public TileNode GetTile(Vector2Int pos) => Tiles.ContainsKey(pos) ? Tiles[pos] : null;
     public bool IsInsideGrid(Vector2Int pos) => pos.x >= 0 && pos.x < width && pos.y >= 0 && pos.y < height;
 
@@ -61,7 +59,6 @@ public class GridManager : MonoBehaviour
         return tile != null && tile.HasObstacle;
     }
 
-    // --- 예약 시스템 ---
     public bool IsReserved(Vector2Int pos) => reservedTiles.Contains(pos);
     public void ClearReservations() => reservedTiles.Clear();
     public bool TryReserveTile(Vector2Int pos)
@@ -72,22 +69,63 @@ public class GridManager : MonoBehaviour
     }
     public void CancelReservation(Vector2Int pos) { if (reservedTiles.Contains(pos)) reservedTiles.Remove(pos); }
 
-    // --- 좌표 변환 ---
     public Vector3 GetWorldPosition(Vector2Int gridPos, float yPos)
     {
         float xOffset = (width - 1) * cellSpacing * 0.5f;
         return new Vector3(gridPos.x * cellSpacing - xOffset, yPos, -gridPos.y * cellSpacing);
     }
 
-    // --- 등록/해제 헬퍼 ---
-    public void RegisterObstacle(Vector2Int pos, ObstacleBase obs) { var t = GetTile(pos); if (t != null) t.Obstacle = obs; }
-    public void RemoveObstacle(Vector2Int pos) { var t = GetTile(pos); if (t != null) t.Obstacle = null; }
-    public void RegisterUnit(Vector2Int pos, EnemyBase unit) { var t = GetTile(pos); if (t != null) t.OccupyingUnit = unit; }
-    public void RemoveUnit(Vector2Int pos) { var t = GetTile(pos); if (t != null) t.OccupyingUnit = null; }
+    // --- 등록/해제 헬퍼 (CS1061 에러 해결) ---
+    public void RegisterObstacle(Vector2Int pos, ObstacleObject obs)
+    {
+        var t = GetTile(pos);
+        if (t != null) t.Obstacle = obs;
+    }
 
-    // ==================================================================================
-    // [전장 이동 시스템] 중앙 행(Row)들이 플레이어 쪽(아래)으로 이동
-    // ==================================================================================
+    public void RemoveObstacle(Vector2Int pos)
+    {
+        var t = GetTile(pos);
+        if (t != null) t.Obstacle = null;
+    }
+
+    public void RegisterUnit(Vector2Int pos, EnemyBase unit)
+    {
+        var t = GetTile(pos);
+        if (t != null) t.OccupyingUnit = unit;
+    }
+
+    public void RemoveUnit(Vector2Int pos)
+    {
+        var t = GetTile(pos);
+        if (t != null) t.OccupyingUnit = null;
+    }
+
+    // [복구] Zone 및 Item 관련 메서드
+    public void RegisterZone(Vector2Int pos, ZoneBase zone)
+    {
+        var t = GetTile(pos);
+        if (t != null) t.Zone = zone;
+    }
+
+    public void RemoveZone(Vector2Int pos)
+    {
+        var t = GetTile(pos);
+        if (t != null) t.Zone = null;
+    }
+
+    public void RegisterItem(Vector2Int pos, ItemBase item)
+    {
+        var t = GetTile(pos);
+        if (t != null) t.Item = item;
+    }
+
+    public void RemoveItem(Vector2Int pos)
+    {
+        var t = GetTile(pos);
+        if (t != null) t.Item = null;
+    }
+
+    // --- 전장 이동 시스템 ---
     public IEnumerator ScrollCentralRows()
     {
         int startY = 1;
@@ -99,11 +137,9 @@ public class GridManager : MonoBehaviour
             {
                 Vector2Int currentPos = new Vector2Int(x, y);
                 Vector2Int nextPos = new Vector2Int(x, y + 1);
-
                 MoveTileContent(currentPos, nextPos);
             }
         }
-
         yield return new WaitForSeconds(scrollSpeed);
     }
 
@@ -114,7 +150,7 @@ public class GridManager : MonoBehaviour
 
         if (fromNode == null || toNode == null) return;
 
-        // A. 유닛 이동
+        // Unit Move
         if (fromNode.OccupyingUnit != null)
         {
             toNode.OccupyingUnit = fromNode.OccupyingUnit;
@@ -123,7 +159,7 @@ public class GridManager : MonoBehaviour
             StartCoroutine(SmoothMove(toNode.OccupyingUnit.transform, GetWorldPosition(to, unitHeight)));
         }
 
-        // B. 장애물 이동
+        // Obstacle Move
         if (fromNode.Obstacle != null)
         {
             toNode.Obstacle = fromNode.Obstacle;
@@ -132,7 +168,7 @@ public class GridManager : MonoBehaviour
             StartCoroutine(SmoothMove(toNode.Obstacle.transform, GetWorldPosition(to, unitHeight)));
         }
 
-        // C. 아이템 이동
+        // Item Move
         if (fromNode.Item != null)
         {
             toNode.Item = fromNode.Item;

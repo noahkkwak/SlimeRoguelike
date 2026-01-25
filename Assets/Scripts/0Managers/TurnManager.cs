@@ -3,12 +3,11 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 
-
 public class TurnManager : MonoBehaviour
 {
     public static TurnManager Instance;
 
-    public TurnState currentState = TurnState.PlayerTurn;
+    public TurnState currentState = TurnState.PlayerTurn; // [수정] PlayerInput -> PlayerTurn
     public List<EnemyBase> activeEnemies = new List<EnemyBase>();
 
     void Awake() => Instance = this;
@@ -53,10 +52,13 @@ public class TurnManager : MonoBehaviour
 
     public void StartPlayerTurn()
     {
-        currentState = TurnState.PlayerTurn;
+        currentState = TurnState.PlayerTurn; // [수정]
 
+        // ObstacleManager가 존재할 때만 호출 (CS0103 에러 방지)
         if (ObstacleManager.Instance != null)
+        {
             ObstacleManager.Instance.OnTurnStart();
+        }
 
         GridManager.Instance.ClearReservations();
 
@@ -77,13 +79,13 @@ public class TurnManager : MonoBehaviour
 
     public void OnPlayerActionCompleted()
     {
-        if (currentState == TurnState.PlayerTurn)
+        if (currentState == TurnState.PlayerTurn) // [수정]
             StartCoroutine(ExecuteTurnPhase());
     }
 
     IEnumerator ExecuteTurnPhase()
     {
-        currentState = TurnState.EnemyTurn;
+        currentState = TurnState.EnemyTurn; // [수정] EnemyTurn으로 통일
 
         // 1. 적 이동
         foreach (var enemy in activeEnemies) if (enemy != null) enemy.ExecuteMove();
@@ -102,7 +104,7 @@ public class TurnManager : MonoBehaviour
         yield return new WaitForSeconds(0.2f);
 
         // 4. 적 공격 실행
-        currentState = TurnState.EnemyAct;
+        // 공격 시점 상태는 EnemyTurn 유지 혹은 별도 상태 정의 가능
         foreach (var enemy in activeEnemies) if (enemy != null) enemy.ExecuteAttack();
         yield return new WaitForSeconds(0.4f);
 

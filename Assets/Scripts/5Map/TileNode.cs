@@ -6,7 +6,7 @@ public class TileNode
 {
     public Vector2Int Coordinate;
     public EnemyBase OccupyingUnit = null;
-    public ObstacleBase Obstacle = null;
+    public ObstacleObject Obstacle = null;
     public ZoneBase Zone = null;
     public ItemBase Item = null;
 
