@@ -2814,6 +2814,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   currentState: 0
   activeEnemies: []
+  currentTurnCount: 0
 --- !u!114 &1716834970
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2870,13 +2871,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9297009b567a5164ebd619d3577f0c14, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  initialObstacles:
-  - name: Box
-    prefab: {fileID: 983870565094274103, guid: 4be841a555de0d949925c0efdea0c899, type: 3}
-    coordinate: {x: 3, y: 2}
-  - name: Push
-    prefab: {fileID: 983870565094274103, guid: 3f05381df6df4174eb9aba92ed2cdb22, type: 3}
-    coordinate: {x: 4, y: 2}
+  randomObstaclePrefabs:
+  - {fileID: 983870565094274103, guid: 4be841a555de0d949925c0efdea0c899, type: 3}
+  - {fileID: 983870565094274103, guid: 3f05381df6df4174eb9aba92ed2cdb22, type: 3}
+  initialObstacles: []
   activeObstacles: []
 --- !u!1001 &1742938237
 PrefabInstance:
