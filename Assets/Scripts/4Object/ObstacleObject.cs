@@ -8,15 +8,18 @@ public class ObstacleObject : MonoBehaviour
 
     [Header("State")]
     public Vector2Int gridPosition;
-    public bool isWalkable = false; // 소문자 변수
+    public bool isWalkable = false;
     public bool isDestructible = true;
 
-    // [중요] 외부에서 접근할 대문자 프로퍼티 추가 (CS1061 에러 해결)
+    // 외부 접근용 프로퍼티
     public bool IsWalkable => isWalkable;
+
+    private bool isInitialized = false; // [신규] 중복 초기화 방지 플래그
 
     void Start()
     {
-        if (GridManager.Instance != null)
+        // 매니저에 의해 생성된 게 아니라, 씬에 미리 배치된 경우 스스로 등록
+        if (!isInitialized && GridManager.Instance != null)
         {
             Initialize(gridPosition);
         }
@@ -25,10 +28,14 @@ public class ObstacleObject : MonoBehaviour
     public void Initialize(Vector2Int pos)
     {
         this.gridPosition = pos;
+        this.isInitialized = true;
 
         if (GridManager.Instance != null)
         {
+            // 위치를 그리드 좌표에 맞춰 강제 이동
             transform.position = GridManager.Instance.GetWorldPosition(pos, GridManager.Instance.unitHeight);
+
+            // 그리드 매니저에게 등록
             GridManager.Instance.RegisterObstacle(pos, this);
         }
     }
@@ -39,8 +46,12 @@ public class ObstacleObject : MonoBehaviour
 
         if (type == ObstacleType.Destructible || isDestructible)
         {
+            // 파괴 처리
             if (GridManager.Instance != null)
                 GridManager.Instance.RemoveObstacle(gridPosition);
+
+            if (ObstacleManager.Instance != null)
+                ObstacleManager.Instance.RemoveObstacle(this);
 
             Destroy(gameObject);
         }
