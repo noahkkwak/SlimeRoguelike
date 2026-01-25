@@ -1,14 +1,14 @@
 using UnityEngine;
 
-// namespace 제거함 (접근성 문제 해결)
+// [통합] 네임스페이스 제거 (접근성 문제 해결)
 
-// 턴 상태 (기존 코드와 호환 + 환경 턴 추가)
+// 턴 상태
 public enum TurnState
 {
-    PlayerTurn,     // 기존 코드 호환 (PlayerInput 대체)
-    PlayerAct,      // 플레이어 행동 중
-    EnvironmentAct, // [신규] 전장 이동
-    EnemyTurn,      // 기존 코드 호환 (EnemyAct 대체)
+    PlayerTurn,     // 플레이어 입력 대기
+    PlayerAct,      // 플레이어 행동 실행 중
+    EnvironmentAct, // 전장(타일) 이동
+    EnemyTurn,      // 적 행동 실행 중
     Processing      // 연산 대기
 }
 
@@ -60,20 +60,28 @@ public enum CollisionEffect
     None, Damage, Stun, Push
 }
 
-// 적 상태 (EnemyBase 호환용)
+// 적 상태
 public enum EnemyState
 {
     Idle, Ready, Move, Attack, Stunned, Dead
 }
 
-// 아이템 타입 (ItemBase 호환용)
+// 아이템 타입
 public enum ItemType
 {
     Weapon, Armor, Consumable
 }
 
-// 영역 타입 (ZoneBase 호환용)
+// 영역 타입
 public enum ZoneType
 {
     Damage, Heal, Slow
+}
+
+// [복구 완료] 적 이동 패턴 (EnemyData에서 사용)
+public enum MovePattern
+{
+    Follow,     // 플레이어 추적
+    Random,     // 무작위 이동
+    Stationary  // 고정형 (이동 안 함)
 }

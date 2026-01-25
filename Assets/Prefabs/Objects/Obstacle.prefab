@@ -46,17 +46,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 351b6b877cee227429c5c56a3370323c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  objName: 
-  type: 0
-  maxHp: 1
-  currentHp: 0
-  currentPos: {x: 0, y: 0}
-  IsWalkable: 0
-  isPushable: 0
-  collisionDamage: 1
+  type: 1
   collisionEffect: 1
-  slideSpeed: 15
-  destroyDelayAfterCrash: 0.05
+  gridPosition: {x: 0, y: 0}
+  isWalkable: 0
+  isDestructible: 0
 --- !u!1 &1975080883100590883
 GameObject:
   m_ObjectHideFlags: 0
